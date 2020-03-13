@@ -15,6 +15,7 @@
  */
 package com.google.android.exoplayer2.upstream;
 
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -79,7 +80,7 @@ public final class DefaultBandwidthMeter implements BandwidthMeter, TransferList
   /** Default maximum weight for the sliding window. */
   public static final int DEFAULT_SLIDING_WINDOW_MAX_WEIGHT = 2000;
 
-  @Nullable private static DefaultBandwidthMeter singletonInstance;
+  @SuppressLint("StaticFieldLeak") @Nullable private static DefaultBandwidthMeter singletonInstance;
 
   /** Builder for a bandwidth meter. */
   public static final class Builder {

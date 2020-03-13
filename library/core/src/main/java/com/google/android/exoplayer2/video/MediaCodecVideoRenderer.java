@@ -166,6 +166,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   private int pendingOutputStreamOffsetCount;
   @Nullable private VideoFrameMetadataListener frameMetadataListener;
 
+  private static final long DEFAULT_DECODE_AHEAD_TIMEUS = 50 * 1000;
+  private long maxAheadTimedReleasUs = DEFAULT_DECODE_AHEAD_TIMEUS;
+
   /**
    * @param context A context.
    * @param mediaCodecSelector A decoder selector.
@@ -523,7 +526,10 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   @Override
   public boolean isReady() {
     if (super.isReady() && (renderedFirstFrame || (dummySurface != null && surface == dummySurface)
-        || getCodec() == null || tunneling)) {
+            // SPY-18128: we add a condition to the "getCodec() == null" check below to prevent the renderer signalling that
+            // it is ready before a Codec can be created (if we are waiting for a MediaCrypto from the DRM session). this
+            // prevents the Renderer from toggling between "ready/not ready" at the beginning of DRM playback
+        || (!waitingForMediaCrypto && getCodec() == null) || tunneling)) {
       // Ready. If we were joining then we've now joined, so clear the joining deadline.
       joiningDeadlineMs = C.TIME_UNSET;
       return true;
@@ -749,6 +755,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     codecNeedsSetOutputSurfaceWorkaround = codecNeedsSetOutputSurfaceWorkaround(name);
     codecHandlesHdr10PlusOutOfBandMetadata =
         Assertions.checkNotNull(getCodecInfo()).isHdr10PlusOutOfBandMetadataSupported();
+    maxAheadTimedReleasUs = getMaxAheadTimedReleaseUs();
   }
 
   @Override
@@ -923,7 +930,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
 
     if (Util.SDK_INT >= 21) {
       // Let the underlying framework time the release.
-      if (earlyUs < 50000) {
+      if (earlyUs < maxAheadTimedReleasUs) {
         notifyFrameMetadataListener(
             presentationTimeUs, adjustedReleaseTimeNs, format, currentMediaFormat);
         renderOutputBufferV21(codec, bufferIndex, presentationTimeUs, adjustedReleaseTimeNs);
@@ -1211,7 +1218,8 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     return Util.SDK_INT >= 23
         && !tunneling
         && !codecNeedsSetOutputSurfaceWorkaround(codecInfo.name)
-        && (!codecInfo.secure || DummySurface.isSecureSupported(context));
+        && (!codecInfo.secure || DummySurface.isSecureSupported(context))
+        && false; // SPY-13758
   }
 
   private void setJoiningDeadlineMs() {
@@ -1868,5 +1876,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
         onProcessedTunneledBuffer(presentationTimeUs);
       }
     }
+  }
+
+  protected long getMaxAheadTimedReleaseUs() {
+    return DEFAULT_DECODE_AHEAD_TIMEUS;
   }
 }

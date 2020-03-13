@@ -41,7 +41,7 @@ import java.lang.reflect.Method;
  * track. Call {@link #handleEndOfStream(long)} when no more data will be written to the track. When
  * the audio track will no longer be used, call {@link #reset()}.
  */
-/* package */ final class AudioTrackPositionTracker {
+/* package */ public final class AudioTrackPositionTracker {
 
   /** Listener for position tracker events. */
   public interface Listener {
@@ -491,7 +491,7 @@ import java.lang.reflect.Method;
    *
    * @return The playback head position, in frames.
    */
-  private long getPlaybackHeadPosition() {
+  public long getPlaybackHeadPosition() {
     AudioTrack audioTrack = Assertions.checkNotNull(this.audioTrack);
     if (stopTimestampUs != C.TIME_UNSET) {
       // Simulate the playback head position up to the total number of frames submitted.
@@ -506,7 +506,15 @@ import java.lang.reflect.Method;
       return 0;
     }
 
-    long rawPlaybackHeadPosition = 0xFFFFFFFFL & audioTrack.getPlaybackHeadPosition();
+    //SPY-10179: sanitize wrap around - Samsung Tab4 has a false wraparound at position 16384 for Netflix
+    //SPY-10840: kinlde HDX
+    long rawPlaybackHeadPosition =  audioTrack.getPlaybackHeadPosition();
+    if (rawPlaybackHeadPosition < 0) {
+      rawPlaybackHeadPosition = 0;
+    } else {
+      rawPlaybackHeadPosition &= 0xFFFFFFFFL;
+    }
+    // long rawPlaybackHeadPosition = 0xFFFFFFFFL & audioTrack.getPlaybackHeadPosition();
     if (needsPassthroughWorkarounds) {
       // Work around an issue with passthrough/direct AudioTracks on platform API versions 21/22
       // where the playback head position jumps back to zero on paused passthrough/direct audio

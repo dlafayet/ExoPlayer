@@ -87,7 +87,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
 
   private final Context context;
   private final EventDispatcher eventDispatcher;
-  private final AudioSink audioSink;
+  protected final AudioSink audioSink;
   private final long[] pendingStreamChangeTimesUs;
 
   private int codecMaxInputSize;

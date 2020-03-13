@@ -47,7 +47,7 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
 /**
  * Paints subtitle {@link Cue}s.
  */
-/* package */ final class SubtitlePainter {
+/* package */ public class SubtitlePainter {
 
   private static final String TAG = "SubtitlePainter";
 
@@ -60,8 +60,8 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
   private final float outlineWidth;
   private final float shadowRadius;
   private final float shadowOffset;
-  private final float spacingMult;
-  private final float spacingAdd;
+  protected float spacingMult;
+  protected float spacingAdd;
 
   private final TextPaint textPaint;
   private final Paint paint;
@@ -99,7 +99,7 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
   // Derived drawing variables.
   private @MonotonicNonNull StaticLayout textLayout;
   private int textLeft;
-  private int textTop;
+  protected int textTop;
   private int textPaddingX;
   private @MonotonicNonNull Rect bitmapRect;
 
@@ -371,14 +371,18 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
     this.textPaddingX = textPaddingX;
   }
 
+  protected void setupBitmapLayout(){
+    setupBitmapLayout(false);
+  }
+
   @RequiresNonNull("cueBitmap")
-  private void setupBitmapLayout() {
+  protected void setupBitmapLayout(boolean normalizedSize) {
     Bitmap cueBitmap = this.cueBitmap;
     int parentWidth = parentRight - parentLeft;
     int parentHeight = parentBottom - parentTop;
     float anchorX = parentLeft + (parentWidth * cuePosition);
     float anchorY = parentTop + (parentHeight * cueLine);
-    int width = Math.round(parentWidth * cueSize);
+    int width = Math.round((normalizedSize ? Math.min(parentHeight, parentWidth) : parentWidth) * cueSize);
     int height = cueBitmapHeight != Cue.DIMEN_UNSET ? Math.round(parentHeight * cueBitmapHeight)
         : Math.round(width * ((float) cueBitmap.getHeight() / cueBitmap.getWidth()));
     int x =
@@ -391,6 +395,9 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
             cueLineAnchor == Cue.ANCHOR_TYPE_END
                 ? (anchorY - height)
                 : cueLineAnchor == Cue.ANCHOR_TYPE_MIDDLE ? (anchorY - (height / 2)) : anchorY);
+    //SPY-18296: make sure bitmap rect is within the boundary after position override
+    x = Math.max(parentLeft, x);
+    y = Math.max(parentTop, y);
     bitmapRect = new Rect(x, y, x + width, y + height);
   }
 
@@ -449,9 +456,10 @@ import org.checkerframework.checker.nullness.qual.RequiresNonNull;
     canvas.restoreToCount(saveCount);
   }
 
+  protected Paint bitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
   @RequiresNonNull({"cueBitmap", "bitmapRect"})
   private void drawBitmapLayout(Canvas canvas) {
-    canvas.drawBitmap(cueBitmap, /* src= */ null, bitmapRect, /* paint= */ null);
+    canvas.drawBitmap(cueBitmap, /* src= */ null, bitmapRect, /* paint= */ bitmapPaint);
   }
 
   /**

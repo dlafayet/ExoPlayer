@@ -50,7 +50,7 @@ import java.util.Collections;
  * their last input immediately after that input is queued. This means that, for example, speed
  * adjustment is not possible while using tunneling.
  */
-public final class DefaultAudioSink implements AudioSink {
+public class DefaultAudioSink implements AudioSink {
 
   /**
    * Thrown when the audio track has provided a spurious timestamp, if {@link
@@ -244,7 +244,7 @@ public final class DefaultAudioSink implements AudioSink {
   private final AudioProcessor[] toIntPcmAvailableAudioProcessors;
   private final AudioProcessor[] toFloatPcmAvailableAudioProcessors;
   private final ConditionVariable releasingConditionVariable;
-  private final AudioTrackPositionTracker audioTrackPositionTracker;
+  protected final AudioTrackPositionTracker audioTrackPositionTracker;
   private final ArrayDeque<PlaybackParametersCheckpoint> playbackParametersCheckpoints;
 
   @Nullable private Listener listener;
@@ -252,8 +252,8 @@ public final class DefaultAudioSink implements AudioSink {
   @Nullable private AudioTrack keepSessionIdAudioTrack;
 
   @Nullable private Configuration pendingConfiguration;
-  private Configuration configuration;
-  private AudioTrack audioTrack;
+  protected Configuration configuration;
+  protected AudioTrack audioTrack;
 
   private AudioAttributes audioAttributes;
   @Nullable private PlaybackParameters afterDrainPlaybackParameters;
@@ -1085,7 +1085,7 @@ public final class DefaultAudioSink implements AudioSink {
     return audioTrack != null;
   }
 
-  private long getSubmittedFrames() {
+  protected long getSubmittedFrames() {
     return configuration.isInputPcm
         ? (submittedPcmBytes / configuration.inputPcmFrameSize)
         : submittedEncodedFrames;
@@ -1324,7 +1324,7 @@ public final class DefaultAudioSink implements AudioSink {
   }
 
   /** Stores configuration relating to the audio format. */
-  private static final class Configuration {
+  protected static final class Configuration {
 
     public final boolean isInputPcm;
     public final int inputPcmFrameSize;

@@ -16,6 +16,9 @@
 package com.google.android.exoplayer2.decoder;
 
 import android.annotation.TargetApi;
+import android.media.MediaCodec;
+import android.os.Build;
+
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.util.Util;
 
@@ -116,7 +119,19 @@ public final class CryptoInfo {
    * @return The equivalent {@link android.media.MediaCodec.CryptoInfo} instance.
    */
   public android.media.MediaCodec.CryptoInfo getFrameworkCryptoInfo() {
-    return frameworkCryptoInfo;
+    // Netflix: return a copy of frameworkCryptoInfo since we are going to pass it to MediaCodec in separate thread
+    // return frameworkCryptoInfo;
+    MediaCodec.CryptoInfo newInfo = new MediaCodec.CryptoInfo();
+    newInfo.set(frameworkCryptoInfo.numSubSamples,
+            frameworkCryptoInfo.numBytesOfClearData.clone(),
+            frameworkCryptoInfo.numBytesOfEncryptedData.clone(),
+            frameworkCryptoInfo.key.clone(),
+            frameworkCryptoInfo.iv.clone(),
+            frameworkCryptoInfo.mode);
+    if(patternHolder != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+      newInfo.setPattern(patternHolder.pattern);
+    }
+    return newInfo;
   }
 
   /** @deprecated Use {@link #getFrameworkCryptoInfo()}. */

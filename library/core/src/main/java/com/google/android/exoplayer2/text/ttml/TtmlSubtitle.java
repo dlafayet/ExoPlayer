@@ -27,7 +27,7 @@ import java.util.Map;
 /**
  * A representation of a TTML subtitle.
  */
-/* package */ final class TtmlSubtitle implements Subtitle {
+/* package */ public final class TtmlSubtitle implements Subtitle {
 
   private final TtmlNode root;
   private final long[] eventTimesUs;

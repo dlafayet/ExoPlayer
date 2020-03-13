@@ -977,7 +977,7 @@ public final class Format implements Parcelable {
     this.encoderDelay = encoderDelay == Format.NO_VALUE ? 0 : encoderDelay;
     this.encoderPadding = encoderPadding == Format.NO_VALUE ? 0 : encoderPadding;
     // Audio and text specific.
-    this.language = Util.normalizeLanguageCode(language);
+    this.language = language; // nflx - disable costly normalization Util.normalizeLanguageCode(language);
     this.accessibilityChannel = accessibilityChannel;
     // Provided by source.
     this.exoMediaCryptoType = exoMediaCryptoType;

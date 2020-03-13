@@ -22,7 +22,7 @@ package com.google.android.exoplayer2.decoder;
  * To ensure that the counter values are made visible across threads, users of this class should
  * invoke {@link #ensureUpdated()} prior to reading and after writing.
  */
-public final class DecoderCounters {
+public class DecoderCounters {
 
   /**
    * The number of times a decoder has been initialized.

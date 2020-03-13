@@ -1037,7 +1037,7 @@ public final class MediaCodecUtil {
 
   }
 
-  private static final class CodecKey {
+  public static final class CodecKey {
 
     public final String mimeType;
     public final boolean secure;

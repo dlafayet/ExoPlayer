@@ -22,7 +22,9 @@ import android.os.Message;
 import android.os.Process;
 import android.os.SystemClock;
 import android.util.Pair;
+
 import androidx.annotation.Nullable;
+
 import com.google.android.exoplayer2.DefaultMediaClock.PlaybackParameterListener;
 import com.google.android.exoplayer2.Player.DiscontinuityReason;
 import com.google.android.exoplayer2.source.MediaPeriod;
@@ -41,6 +43,7 @@ import com.google.android.exoplayer2.util.HandlerWrapper;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.TraceUtil;
 import com.google.android.exoplayer2.util.Util;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -587,7 +590,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
     if (playingPeriodHolder.prepared) {
       long rendererPositionElapsedRealtimeUs = SystemClock.elapsedRealtime() * 1000;
       playingPeriodHolder.mediaPeriod.discardBuffer(
-          playbackInfo.positionUs - backBufferDurationUs, retainBackBufferFromKeyframe);
+          playbackInfo.positionUs - loadControl.getBackBufferDurationUs(), retainBackBufferFromKeyframe);
       for (int i = 0; i < renderers.length; i++) {
         Renderer renderer = renderers[i];
         if (renderer.getState() == Renderer.STATE_DISABLED) {
@@ -597,6 +600,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
         // again. The minimum of these values should then be used as the delay before the next
         // invocation of this method.
         renderer.render(rendererPositionUs, rendererPositionElapsedRealtimeUs);
+        //SPY-14342: there is a bogus rebuffer toward end of stream when renderer has ended reading EOS
+        // however streamFinal is not set
+        // TODO SJS - test this logic
+//        if (playingPeriodHolder.info.isFinal) {
+//          if (renderer.hasReadStreamToEnd() && !renderer.isCurrentStreamFinal()) {
+//            SampleStream sampleStream = null;
+//            MediaPeriodHolder readingPeriodHolder = queue.getReadingPeriod();
+//            for (int j = 0; i < renderers.length; i++) {
+//              if (renderers[j] == renderer) {
+//                sampleStream = readingPeriodHolder.sampleStreams[i];
+//                break;
+//              }
+//            }
+//            // Defer setting the stream as final until the renderer has actually consumed the whole
+//            // stream in case of playlist changes that cause the stream to be no longer final.
+//            if (sampleStream != null && renderer.getStream() == sampleStream
+//                    && renderer.hasReadStreamToEnd()) {
+//              renderer.setCurrentStreamFinal();
+//            }
+//          }
+//        }
+        //end of SPY-14342
         renderersEnded = renderersEnded && renderer.isEnded();
         // Determine whether the renderer allows playback to continue. Playback can continue if the
         // renderer is ready or ended. Also continue playback if the renderer is reading ahead into
@@ -721,12 +746,32 @@ import java.util.concurrent.atomic.AtomicBoolean;
           if (C.usToMs(newPeriodPositionUs) == C.usToMs(playbackInfo.positionUs)) {
             // Seek will be performed to the current position. Do nothing.
             periodPositionUs = playbackInfo.positionUs;
+            // SPY-18531: seek to position is same as current playback position, we need the event
+            // to help generate UI transition from seeking to playing state
+            eventHandler
+                    .obtainMessage(
+                            MSG_PLAYBACK_INFO_CHANGED,
+                            playbackInfoUpdate.operationAcks,
+                            playbackInfoUpdate.positionDiscontinuity
+                                    ? playbackInfoUpdate.discontinuityReason
+                                    : C.INDEX_UNSET,
+                            playbackInfo)
+                    .sendToTarget();
             return;
           }
         }
-        newPeriodPositionUs = seekToPeriodPosition(periodId, newPeriodPositionUs);
-        seekPositionAdjusted |= periodPositionUs != newPeriodPositionUs;
-        periodPositionUs = newPeriodPositionUs;
+        if(periodPositionUs == C.POSITION_UNSET) {
+          // we do not have segment index yet - defer seeking until it is available
+          pendingInitialSeekPosition = seekPosition;
+        } else {
+          if (!periodId.equals(playbackInfo.periodId) && newPeriodPositionUs > 0) {
+            // we are seeking to a new period, so we defer snapping until we are in the new period
+            pendingInitialSeekPosition = seekPosition;
+          }
+          newPeriodPositionUs = seekToPeriodPosition(periodId, newPeriodPositionUs);
+          seekPositionAdjusted |= periodPositionUs != newPeriodPositionUs;
+          periodPositionUs = newPeriodPositionUs;
+        }
       }
     } finally {
       playbackInfo = copyWithNewPosition(periodId, periodPositionUs, contentPositionUs);
@@ -785,7 +830,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
       if (newPlayingPeriodHolder.hasEnabledTracks) {
         periodPositionUs = newPlayingPeriodHolder.mediaPeriod.seekToUs(periodPositionUs);
         newPlayingPeriodHolder.mediaPeriod.discardBuffer(
-            periodPositionUs - backBufferDurationUs, retainBackBufferFromKeyframe);
+            periodPositionUs - loadControl.getBackBufferDurationUs(), retainBackBufferFromKeyframe);
       }
       resetRendererPosition(periodPositionUs);
       maybeContinueLoading();
@@ -1310,7 +1355,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
       // Resolve initial seek position.
       Pair<Object, Long> periodPosition =
           resolveSeekPosition(pendingInitialSeekPosition, /* trySubsequentPeriods= */ true);
-      pendingInitialSeekPosition = null;
+      // pendingInitialSeekPosition = null;
       if (periodPosition == null) {
         // The seek position was valid for the timeline that it was performed into, but the
         // timeline has changed and a suitable seek position could not be resolved in the new one.
@@ -1730,7 +1775,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
     maybeContinueLoading();
   }
 
-  private void handleContinueLoadingRequested(MediaPeriod mediaPeriod) {
+  private void handleContinueLoadingRequested(MediaPeriod mediaPeriod) throws ExoPlaybackException {
     if (!queue.isLoading(mediaPeriod)) {
       // Stale event.
       return;
@@ -1754,7 +1799,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
     }
   }
 
-  private void maybeContinueLoading() {
+  private void maybeContinueLoading() throws ExoPlaybackException {
+      if (pendingInitialSeekPosition != null) {
+          //SPY-14741: workaround  corrupted first sample by avoiding seek while first chunk is loading
+          long seekPositionUs = pendingInitialSeekPosition.windowPositionUs;
+          if (seekPositionUs > 0) {
+              MediaPeriodHolder loadingPeriodHolder = queue.getLoadingPeriod();
+              if (loadingPeriodHolder.prepared) {
+                  long adjustedSeekPositionUs = loadingPeriodHolder.mediaPeriod.getAdjustedSeekPositionUs(seekPositionUs, seekParameters);
+                  if (adjustedSeekPositionUs != C.TIME_UNSET) {
+                      Log.d("NFLX", "resetRendererPosition to initialSeekPosition " + seekPositionUs + " => " + adjustedSeekPositionUs);
+                      if (seekPositionUs != adjustedSeekPositionUs) {
+                          loadingPeriodHolder.mediaPeriod.seekToUs(adjustedSeekPositionUs);
+                          resetRendererPosition(adjustedSeekPositionUs);
+                      }
+                      pendingInitialSeekPosition = null;
+                  }
+              }
+          } else {
+              // we know seekPositionUs=0 does not need adjustment
+              pendingInitialSeekPosition = null;
+          }
+      }
     shouldContinueLoading = shouldContinueLoading();
     if (shouldContinueLoading) {
       queue.getLoadingPeriod().continueLoading(rendererPositionUs);

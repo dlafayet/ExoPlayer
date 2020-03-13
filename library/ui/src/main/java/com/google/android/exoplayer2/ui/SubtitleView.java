@@ -34,7 +34,7 @@ import java.util.List;
 /**
  * A view for displaying subtitle {@link Cue}s.
  */
-public final class SubtitleView extends View implements TextOutput {
+public class SubtitleView extends View implements TextOutput {
 
   /**
    * The default fractional text size.
@@ -51,11 +51,13 @@ public final class SubtitleView extends View implements TextOutput {
    */
   public static final float DEFAULT_BOTTOM_PADDING_FRACTION = 0.08f;
 
-  private final List<SubtitlePainter> painters;
+  protected final List<SubtitlePainter> painters;
 
-  @Nullable private List<Cue> cues;
-  @Cue.TextSizeType private int textSizeType;
-  private float textSize;
+  @Nullable
+  protected List<Cue> cues;
+  @Cue.TextSizeType
+  protected int textSizeType;
+  protected float textSize;
   private boolean applyEmbeddedStyles;
   private boolean applyEmbeddedFontSizes;
   private CaptionStyleCompat style;
@@ -251,25 +253,17 @@ public final class SubtitleView extends View implements TextOutput {
       return;
     }
 
-    int rawViewHeight = getHeight();
-
-    // Calculate the cue box bounds relative to the canvas after padding is taken into account.
-    int left = getPaddingLeft();
-    int top = getPaddingTop();
-    int right = getWidth() - getPaddingRight();
-    int bottom = rawViewHeight - getPaddingBottom();
-    if (bottom <= top || right <= left) {
-      // No space to draw subtitles.
-      return;
-    }
-    int viewHeightMinusPadding = bottom - top;
-
-    float defaultViewTextSizePx =
-        resolveTextSize(textSizeType, textSize, rawViewHeight, viewHeightMinusPadding);
+    float defaultViewTextSizePx = getSubtitleSizePx(textSizeType, textSize);
     if (defaultViewTextSizePx <= 0) {
       // Text has no height.
       return;
     }
+    int rawViewHeight = getHeight();
+    int left = getPaddingLeft();
+    int top = getPaddingTop();
+    int right = getWidth() - getPaddingRight();
+    int bottom = rawViewHeight - getPaddingBottom();
+    int viewHeightMinusPadding = bottom - top;
 
     int cueCount = cues.size();
     for (int i = 0; i < cueCount; i++) {
@@ -290,6 +284,29 @@ public final class SubtitleView extends View implements TextOutput {
           right,
           bottom);
     }
+  }
+
+  protected float getSubtitleSizePx(int textSizeType, float textSize) {
+    int rawViewHeight = getHeight();
+
+    // Calculate the cue box bounds relative to the canvas after padding is taken into account.
+    int left = getPaddingLeft();
+    int top = getPaddingTop();
+    int right = getWidth() - getPaddingRight();
+    int bottom = rawViewHeight - getPaddingBottom();
+    if (bottom <= top || right <= left) {
+      // No space to draw subtitles.
+      return 0;
+    }
+    int viewHeightMinusPadding = bottom - top;
+
+    float defaultViewTextSizePx =
+            resolveTextSize(textSizeType, textSize, rawViewHeight, viewHeightMinusPadding);
+    if (defaultViewTextSizePx <= 0) {
+      // Text has no height.
+      return 0;
+    }
+    return defaultViewTextSizePx;
   }
 
   private float resolveCueTextSize(Cue cue, int rawViewHeight, int viewHeightMinusPadding) {
@@ -340,4 +357,31 @@ public final class SubtitleView extends View implements TextOutput {
     return CaptionStyleCompat.createFromCaptionStyle(captioningManager.getUserStyle());
   }
 
+  /**
+   * a method wrapper for SubtitlePainter#draw()
+   * @param painter
+   * @param cue
+   * @param canvas
+   * @param defaultViewTextSizePx
+   * @param cueTextSizePx
+   * @param left
+   * @param top
+   * @param right
+   * @param bottom
+   */
+  protected void drawWithPainter(SubtitlePainter painter, Cue cue, Canvas canvas, float defaultViewTextSizePx, float cueTextSizePx, int left, int top, int right, int bottom){
+    painter.draw(
+            cue,
+            applyEmbeddedStyles,
+            applyEmbeddedFontSizes,
+            style,
+            defaultViewTextSizePx,
+            cueTextSizePx,
+            bottomPaddingFraction,
+            canvas,
+            left,
+            top,
+            right,
+            bottom);
+  }
 }

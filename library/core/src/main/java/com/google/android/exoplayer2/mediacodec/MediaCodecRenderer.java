@@ -32,6 +32,7 @@ import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.FormatHolder;
+import com.google.android.exoplayer2.decoder.CryptoInfo;
 import com.google.android.exoplayer2.decoder.DecoderCounters;
 import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
 import com.google.android.exoplayer2.drm.DrmSession;
@@ -328,7 +329,8 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
   private boolean drmResourcesAcquired;
   @Nullable private Format inputFormat;
   private Format outputFormat;
-  @Nullable private DrmSession<FrameworkMediaCrypto> codecDrmSession;
+  @Nullable
+  protected DrmSession<FrameworkMediaCrypto> codecDrmSession;
   @Nullable private DrmSession<FrameworkMediaCrypto> sourceDrmSession;
   @Nullable private MediaCrypto mediaCrypto;
   private boolean mediaCryptoRequiresSecureDecoder;
@@ -350,7 +352,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
   private boolean codecNeedsAdaptationWorkaroundBuffer;
   private boolean shouldSkipAdaptationWorkaroundOutputBuffer;
   private boolean codecNeedsEosPropagation;
-  private ByteBuffer[] inputBuffers;
+  protected ByteBuffer[] inputBuffers;
   private ByteBuffer[] outputBuffers;
   private long codecHotswapDeadlineMs;
   private int inputIndex;
@@ -375,6 +377,9 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
   private boolean pendingOutputEndOfStream;
 
   protected DecoderCounters decoderCounters;
+
+  // SPY-18128 - tracks when a Format is read but we are waiting for MediaCrypto to be ready before creating Codec
+  protected boolean waitingForMediaCrypto;
 
   /**
    * @param trackType The track type that the renderer handles. One of the {@code C.TRACK_TYPE_*}
@@ -531,6 +536,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
             // new input format causes the session to be replaced before it's used.
           } else {
             // The drm session isn't open yet.
+            waitingForMediaCrypto = true;
             return;
           }
         } else {
@@ -550,10 +556,12 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
           throw createRendererException(codecDrmSession.getError(), inputFormat);
         } else if (drmSessionState != DrmSession.STATE_OPENED_WITH_KEYS) {
           // Wait for keys.
+          waitingForMediaCrypto = true;
           return;
         }
       }
     }
+    waitingForMediaCrypto = false;
 
     try {
       maybeInitCodecWithFallback(mediaCrypto, mediaCryptoRequiresSecureDecoder);
@@ -629,7 +637,9 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
     inputFormat = null;
     if (sourceDrmSession != null || codecDrmSession != null) {
       // TODO: Do something better with this case.
-      onReset();
+      // SPY-19431 - do not reset codec (allows us to keep Codec alive through playgraph transitions)
+      // onReset();
+      flushOrReleaseCodec();
     } else {
       flushOrReleaseCodec();
     }
@@ -770,7 +780,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
       return true;
     }
 
-    codec.flush();
+    clearInput(true);
     resetInputBuffer();
     resetOutputBuffer();
     codecHotswapDeadlineMs = C.TIME_UNSET;
@@ -1045,7 +1055,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
     }
 
     if (inputIndex < 0) {
-      inputIndex = codec.dequeueInputBuffer(0);
+      inputIndex = getInputIndex();
       if (inputIndex < 0) {
         return false;
       }
@@ -1060,7 +1070,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
         // Do nothing.
       } else {
         codecReceivedEos = true;
-        codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+        queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
         resetInputBuffer();
       }
       codecDrainState = DRAIN_STATE_WAIT_END_OF_STREAM;
@@ -1070,7 +1080,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
     if (codecNeedsAdaptationWorkaroundBuffer) {
       codecNeedsAdaptationWorkaroundBuffer = false;
       buffer.data.put(ADAPTATION_WORKAROUND_BUFFER);
-      codec.queueInputBuffer(inputIndex, 0, ADAPTATION_WORKAROUND_BUFFER.length, 0, 0);
+      queueInputBuffer(inputIndex, 0, ADAPTATION_WORKAROUND_BUFFER.length, 0, 0);
       resetInputBuffer();
       codecReceivedBuffers = true;
       return true;
@@ -1134,7 +1144,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
           // Do nothing.
         } else {
           codecReceivedEos = true;
-          codec.queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+          queueInputBuffer(inputIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
           resetInputBuffer();
         }
       } catch (CryptoException e) {
@@ -1185,9 +1195,10 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
       if (bufferEncrypted) {
         MediaCodec.CryptoInfo cryptoInfo = getFrameworkCryptoInfo(buffer,
             adaptiveReconfigurationBytes);
-        codec.queueSecureInputBuffer(inputIndex, 0, cryptoInfo, presentationTimeUs, 0);
+        PatternWrapper pattern = getPattern(buffer.cryptoInfo);
+        queueSecureInputBuffer(inputIndex, 0, cryptoInfo, pattern, presentationTimeUs, 0);
       } else {
-        codec.queueInputBuffer(inputIndex, 0, buffer.data.limit(), presentationTimeUs, 0);
+        queueInputBuffer(inputIndex, 0, buffer.data.limit(), presentationTimeUs, 0);
       }
       resetInputBuffer();
       codecReceivedBuffers = true;
@@ -1989,4 +2000,60 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
         && "OMX.MTK.AUDIO.DECODER.MP3".equals(name);
   }
 
+  /**
+   * This class is used to hold Pattern data (introduced in API level 24).
+   * However we are using it for Embedded Widevine v14+ which can be used in
+   * devices pre 24 API level.
+   */
+  public static class PatternWrapper {
+
+    /**
+     * @see android.media.MediaCodec.CryptoInfo.Pattern
+     */
+    public int encryptedBlocks;
+
+    /**
+     * @see android.media.MediaCodec.CryptoInfo.Pattern
+     */
+    public int clearBlocks;
+
+    public PatternWrapper(int encryptedBlocks, int clearBlocks) {
+      this.encryptedBlocks = encryptedBlocks;
+      this.clearBlocks = clearBlocks;
+    }
+  }
+
+  private PatternWrapper getPattern(CryptoInfo cryptoInfo) {
+
+    return new PatternWrapper(cryptoInfo.encryptedBlocks, cryptoInfo.clearBlocks);
+  }
+
+  /**
+   *
+   * @param index
+   * @param offset
+   * @param info
+   * @param pattern To support ‘cbcs’ (AES-128-CBC with a skip-crypt pattern) crypto mode for In-App Widevine.
+   * @param presentationTimeUs
+   * @param flags
+   * @throws MediaCodec.CryptoException
+   */
+  protected void queueSecureInputBuffer(int index, int offset, MediaCodec.CryptoInfo info, PatternWrapper pattern, long presentationTimeUs, int flags) throws MediaCodec.CryptoException {
+    codec.queueSecureInputBuffer(index, offset, info, presentationTimeUs, flags);
+  }
+
+  protected void queueInputBuffer(int index, int offset, int size, long presentationTimeUs, int flags) throws MediaCodec.CryptoException {
+    codec.queueInputBuffer(index, offset, size, presentationTimeUs, flags);
+  }
+
+  protected int getInputIndex() {
+    int index = codec.dequeueInputBuffer(0);
+    return index;
+  }
+
+  protected void clearInput(boolean flushCodec){
+    if(flushCodec && codec != null) {
+      codec.flush();
+    }
+  }
 }

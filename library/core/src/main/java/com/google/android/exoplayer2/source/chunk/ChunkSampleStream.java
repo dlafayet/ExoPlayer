@@ -57,6 +57,10 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
     void onSampleStreamReleased(ChunkSampleStream<T> chunkSampleStream);
   }
 
+  public static ChunkSampleStreamFactory DEFAULT_FACTORY =
+          (primaryTrackType, embeddedTrackTypes, embeddedTrackFormats, chunkSource, callback, allocator, positionUs, drmSessionManager, loadErrorHandlingPolicy, eventDispatcher) ->
+                  new ChunkSampleStream(primaryTrackType, embeddedTrackTypes, embeddedTrackFormats, chunkSource, callback, allocator, positionUs, drmSessionManager, loadErrorHandlingPolicy, eventDispatcher);
+
   private static final String TAG = "ChunkSampleStream";
 
   public final int primaryTrackType;
@@ -70,13 +74,13 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
   private final LoadErrorHandlingPolicy loadErrorHandlingPolicy;
   private final Loader loader;
   private final ChunkHolder nextChunkHolder;
-  private final ArrayList<BaseMediaChunk> mediaChunks;
+  protected final ArrayList<BaseMediaChunk> mediaChunks;
   private final List<BaseMediaChunk> readOnlyMediaChunks;
   private final SampleQueue primarySampleQueue;
   private final SampleQueue[] embeddedSampleQueues;
   private final BaseMediaChunkOutput chunkOutput;
 
-  private Format primaryDownstreamTrackFormat;
+  protected Format primaryDownstreamTrackFormat;
   @Nullable private ReleaseCallback<T> releaseCallback;
   private long pendingResetPositionUs;
   private long lastSeekPositionUs;
@@ -657,7 +661,7 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
     }
   }
 
-  private void maybeNotifyPrimaryTrackFormatChanged(int mediaChunkReadIndex) {
+  protected void maybeNotifyPrimaryTrackFormatChanged(int mediaChunkReadIndex) {
     BaseMediaChunk currentChunk = mediaChunks.get(mediaChunkReadIndex);
     Format trackFormat = currentChunk.trackFormat;
     if (!trackFormat.equals(primaryDownstreamTrackFormat)) {

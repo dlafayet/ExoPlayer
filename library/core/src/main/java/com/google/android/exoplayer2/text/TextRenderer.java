@@ -27,6 +27,7 @@ import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.FormatHolder;
 import com.google.android.exoplayer2.RendererCapabilities;
+import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.Util;
@@ -43,7 +44,7 @@ import java.util.List;
  * from a {@link SubtitleDecoderFactory}. The actual rendering of the subtitle {@link Cue}s is
  * delegated to a {@link TextOutput}.
  */
-public final class TextRenderer extends BaseRenderer implements Callback {
+public class TextRenderer extends BaseRenderer implements Callback {
 
   @Documented
   @Retention(RetentionPolicy.SOURCE)
@@ -80,12 +81,17 @@ public final class TextRenderer extends BaseRenderer implements Callback {
   private boolean inputStreamEnded;
   private boolean outputStreamEnded;
   @ReplacementState private int decoderReplacementState;
-  @Nullable private Format streamFormat;
+  @Nullable
+  protected Format streamFormat;
   @Nullable private SubtitleDecoder decoder;
   @Nullable private SubtitleInputBuffer nextInputBuffer;
   @Nullable private SubtitleOutputBuffer subtitle;
   @Nullable private SubtitleOutputBuffer nextSubtitle;
   private int nextSubtitleEventIndex;
+
+  //rendering stats for current streamFormat;
+  protected int renderCount = -1;
+  protected int skipCount = -1;
 
   /**
    * @param output The output.
@@ -139,6 +145,8 @@ public final class TextRenderer extends BaseRenderer implements Callback {
     } else {
       decoder = decoderFactory.createDecoder(streamFormat);
     }
+    renderCount = 0;
+    skipCount = 0;
   }
 
   @Override
@@ -175,6 +183,7 @@ public final class TextRenderer extends BaseRenderer implements Callback {
 
     boolean textRendererNeedsUpdate = false;
     if (subtitle != null) {
+      int prevIndex = nextSubtitleEventIndex;
       // We're iterating through the events in a subtitle. Set textRendererNeedsUpdate if we
       // advance to the next event.
       long subtitleNextEventTimeUs = getNextEventTime();
@@ -182,6 +191,9 @@ public final class TextRenderer extends BaseRenderer implements Callback {
         nextSubtitleEventIndex++;
         subtitleNextEventTimeUs = getNextEventTime();
         textRendererNeedsUpdate = true;
+      }
+      if (nextSubtitleEventIndex != C.INDEX_UNSET && prevIndex != C.INDEX_UNSET && (nextSubtitleEventIndex - prevIndex) > 1) {
+        skipCount++;
       }
     }
 
@@ -232,7 +244,7 @@ public final class TextRenderer extends BaseRenderer implements Callback {
           return;
         }
         // Try and read the next subtitle from the source.
-        int result = readSource(formatHolder, nextInputBuffer, false);
+        int result = readTextSource(formatHolder, nextInputBuffer, false);
         if (result == C.RESULT_BUFFER_READ) {
           if (nextInputBuffer.isEndOfStream()) {
             inputStreamEnded = true;
@@ -307,6 +319,7 @@ public final class TextRenderer extends BaseRenderer implements Callback {
     } else {
       invokeUpdateOutputInternal(cues);
     }
+    renderCount++;
   }
 
   private void clearOutput() {
@@ -329,4 +342,18 @@ public final class TextRenderer extends BaseRenderer implements Callback {
     output.onCues(cues);
   }
 
+  protected boolean hasSubtitleOutputBuffer() {
+    return subtitle != null || nextSubtitle != null;
+  }
+
+  /**
+   * wrap around the final method BaseRender.readSource() so TextRender sub-class can override
+   * @param formatHolder
+   * @param buffer
+   * @param formatRequired
+   * @return
+   */
+  protected int readTextSource(FormatHolder formatHolder, DecoderInputBuffer buffer, boolean formatRequired) {
+    return super.readSource(formatHolder, buffer, formatRequired);
+  }
 }

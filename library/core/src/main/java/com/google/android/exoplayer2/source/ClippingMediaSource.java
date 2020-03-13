@@ -32,7 +32,7 @@ import java.util.ArrayList;
  * {@link MediaSource} that wraps a source and clips its timeline based on specified start/end
  * positions. The wrapped source must consist of a single period.
  */
-public final class ClippingMediaSource extends CompositeMediaSource<Void> {
+public class ClippingMediaSource extends CompositeMediaSource<Void> {
 
   /** Thrown when a {@link ClippingMediaSource} cannot clip its wrapped source. */
   public static final class IllegalClippingException extends IOException {

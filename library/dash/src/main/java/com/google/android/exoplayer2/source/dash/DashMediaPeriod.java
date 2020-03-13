@@ -35,6 +35,7 @@ import com.google.android.exoplayer2.source.TrackGroup;
 import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.source.chunk.ChunkSampleStream;
 import com.google.android.exoplayer2.source.chunk.ChunkSampleStream.EmbeddedSampleStream;
+import com.google.android.exoplayer2.source.chunk.ChunkSampleStreamFactory;
 import com.google.android.exoplayer2.source.dash.PlayerEmsgHandler.PlayerEmsgCallback;
 import com.google.android.exoplayer2.source.dash.PlayerEmsgHandler.PlayerTrackEmsgHandler;
 import com.google.android.exoplayer2.source.dash.manifest.AdaptationSet;
@@ -63,7 +64,7 @@ import java.util.regex.Pattern;
 import org.checkerframework.checker.nullness.compatqual.NullableType;
 
 /** A DASH {@link MediaPeriod}. */
-/* package */ final class DashMediaPeriod
+/* package */ public final class DashMediaPeriod
     implements MediaPeriod,
         SequenceableLoader.Callback<ChunkSampleStream<DashChunkSource>>,
         ChunkSampleStream.ReleaseCallback<DashChunkSource> {
@@ -94,6 +95,8 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
   private int periodIndex;
   private List<EventStream> eventStreams;
   private boolean notifiedReadingStarted;
+
+  private ChunkSampleStreamFactory chunkSampleStreamFactory = ChunkSampleStream.DEFAULT_FACTORY;
 
   public DashMediaPeriod(
       int id,
@@ -134,6 +137,10 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     trackGroups = result.first;
     trackGroupInfos = result.second;
     eventDispatcher.mediaPeriodCreated();
+  }
+
+  public void setSampleStreamFactory(ChunkSampleStreamFactory sampleStreamFactory) {
+    this.chunkSampleStreamFactory = sampleStreamFactory;
   }
 
   /**
@@ -720,7 +727,7 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
             trackPlayerEmsgHandler,
             transferListener);
     ChunkSampleStream<DashChunkSource> stream =
-        new ChunkSampleStream<>(
+        chunkSampleStreamFactory.create(
             trackGroupInfo.trackType,
             embeddedTrackTypes,
             embeddedTrackFormats,

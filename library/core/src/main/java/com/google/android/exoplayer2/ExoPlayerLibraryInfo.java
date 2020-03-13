@@ -15,6 +15,8 @@
  */
 package com.google.android.exoplayer2;
 
+import com.google.android.exoplayer2.core.BuildConfig;
+
 import java.util.HashSet;
 
 /**
@@ -49,7 +51,7 @@ public final class ExoPlayerLibraryInfo {
    * Whether the library was compiled with {@link com.google.android.exoplayer2.util.Assertions}
    * checks enabled.
    */
-  public static final boolean ASSERTIONS_ENABLED = true;
+  public static final boolean ASSERTIONS_ENABLED = BuildConfig.DEBUG;
 
   /** Whether an exception should be thrown in case of an OpenGl error. */
   public static final boolean GL_ASSERTIONS_ENABLED = false;
@@ -58,7 +60,7 @@ public final class ExoPlayerLibraryInfo {
    * Whether the library was compiled with {@link com.google.android.exoplayer2.util.TraceUtil}
    * trace enabled.
    */
-  public static final boolean TRACE_ENABLED = true;
+  public static final boolean TRACE_ENABLED = BuildConfig.DEBUG;
 
   private static final HashSet<String> registeredModules = new HashSet<>();
   private static String registeredModulesString = "goog.exo.core";

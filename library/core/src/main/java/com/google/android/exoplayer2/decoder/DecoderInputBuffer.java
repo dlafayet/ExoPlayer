@@ -196,4 +196,18 @@ public class DecoderInputBuffer extends Buffer {
     }
   }
 
+  /**
+   * trigger fired only once, contains delta in us to end of the source
+   */
+  public long enterTransition = 0;
+
+  /**
+   * Netflix
+   * @return true if a frame can be safe dropped before being decoded.
+   * Currently only applicable for video frames signaled via sample dependency description
+   */
+  public final boolean isDisposable() {
+    // TODO  SJS return getFlag(C.BUFFER_FLAG_DISPOSABLE_FRAME);
+    return false;
+  }
 }

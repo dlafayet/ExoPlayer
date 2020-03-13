@@ -25,11 +25,14 @@ public abstract class Buffer {
   @C.BufferFlags
   private int flags;
 
+  private int partialFrameDuration;
+
   /**
    * Clears the buffer.
    */
   public void clear() {
     flags = 0;
+    partialFrameDuration = 0;
   }
 
   /**
@@ -97,4 +100,17 @@ public abstract class Buffer {
     return (flags & flag) == flag;
   }
 
+  /**
+   * @param partialFrameDuration
+   * if partial data at beginning of a frame need to be rendered, partialFrameDuration > 0;
+   * if partial data at end of a frame need to be rendered, partialFrameDuration < 0;
+   * if data of entire frame need to discard or render, partialFrameDuration = 0
+   */
+  public void setPartialFrameDuration(int partialFrameDuration) {
+    this.partialFrameDuration = partialFrameDuration;
+  }
+
+  public int getPartialFrameDuration() {
+    return partialFrameDuration;
+  }
 }

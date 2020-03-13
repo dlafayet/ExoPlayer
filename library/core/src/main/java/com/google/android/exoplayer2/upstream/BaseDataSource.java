@@ -46,7 +46,7 @@ public abstract class BaseDataSource implements DataSource {
   }
 
   @Override
-  public final void addTransferListener(TransferListener transferListener) {
+  public void addTransferListener(TransferListener transferListener) {
     if (!listeners.contains(transferListener)) {
       listeners.add(transferListener);
       listenerCount++;

@@ -58,7 +58,7 @@ import org.xmlpull.v1.XmlPullParserFactory;
  *
  * @see <a href="http://www.w3.org/TR/ttaf1-dfxp/">TTML specification</a>
  */
-public final class TtmlDecoder extends SimpleSubtitleDecoder {
+public class TtmlDecoder extends SimpleSubtitleDecoder {
 
   private static final String TAG = "TtmlDecoder";
 
@@ -174,7 +174,12 @@ public final class TtmlDecoder extends SimpleSubtitleDecoder {
     }
   }
 
-  private FrameAndTickRate parseFrameAndTickRates(XmlPullParser xmlParser)
+  protected FrameAndTickRate parseFrameAndTickRates(XmlPullParser xmlParser)
+          throws SubtitleDecoderException {
+    return parseFrameAndTickRates(xmlParser, TTP);
+  }
+
+  protected FrameAndTickRate parseFrameAndTickRates(XmlPullParser xmlParser, String TTP)
       throws SubtitleDecoderException {
     int frameRate = DEFAULT_FRAME_RATE;
     String frameRateString = xmlParser.getAttributeValue(TTP, "frameRate");
@@ -720,7 +725,7 @@ public final class TtmlDecoder extends SimpleSubtitleDecoder {
     throw new SubtitleDecoderException("Malformed time expression: " + time);
   }
 
-  private static final class FrameAndTickRate {
+  protected static final class FrameAndTickRate {
     final float effectiveFrameRate;
     final int subFrameRate;
     final int tickRate;

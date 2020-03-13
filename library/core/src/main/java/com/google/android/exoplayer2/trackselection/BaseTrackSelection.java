@@ -63,6 +63,10 @@ public abstract class BaseTrackSelection implements TrackSelection {
    *     null or empty. May be in any order.
    */
   public BaseTrackSelection(TrackGroup group, int... tracks) {
+    this(null, group, tracks);
+  }
+
+  public BaseTrackSelection(Comparator<Format> trackComparator, TrackGroup group, int... tracks) {
     Assertions.checkState(tracks.length > 0);
     this.group = Assertions.checkNotNull(group);
     this.length = tracks.length;
@@ -71,7 +75,11 @@ public abstract class BaseTrackSelection implements TrackSelection {
     for (int i = 0; i < tracks.length; i++) {
       formats[i] = group.getFormat(tracks[i]);
     }
-    Arrays.sort(formats, new DecreasingBandwidthComparator());
+    if(trackComparator != null) {
+      Arrays.sort(formats, trackComparator);
+    } else {
+      Arrays.sort(formats, new DecreasingBandwidthComparator());
+    }
     // Set the format indices in the same order.
     this.tracks = new int[length];
     for (int i = 0; i < length; i++) {

@@ -21,7 +21,7 @@ import com.google.android.exoplayer2.C;
  * Offsets timestamps according to an initial sample timestamp offset. MPEG-2 TS timestamps scaling
  * and adjustment is supported, taking into account timestamp rollover.
  */
-public final class TimestampAdjuster {
+public final class TimestampAdjuster implements Fmp4TimestampAdjuster {
 
   /**
    * A special {@code firstSampleTimestampUs} value indicating that presentation timestamps should
@@ -131,6 +131,7 @@ public final class TimestampAdjuster {
    * @param timeUs The timestamp to adjust in microseconds.
    * @return The adjusted timestamp in microseconds.
    */
+  @Override
   public long adjustSampleTimestamp(long timeUs) {
     if (timeUs == C.TIME_UNSET) {
       return C.TIME_UNSET;

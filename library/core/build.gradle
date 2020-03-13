@@ -42,6 +42,12 @@ android {
     }
 
     testOptions.unitTests.includeAndroidResources = true
+
+    testOptions {
+        unitTests.all {
+            enabled false
+        }
+    }
 }
 
 dependencies {

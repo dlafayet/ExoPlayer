@@ -119,7 +119,7 @@ public final class CacheDataSource implements DataSource {
   }
 
   /** Minimum number of bytes to read before checking cache for availability. */
-  private static final long MIN_READ_BEFORE_CHECKING_CACHE = 100 * 1024;
+  private static final long MIN_READ_BEFORE_CHECKING_CACHE = 100 * 1024 * 1024;
 
   private final Cache cache;
   private final DataSource cacheReadDataSource;
