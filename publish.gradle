@@ -66,3 +66,82 @@ static void addLicense(File pom) {
     printer.print(xml)
     writer.close()
 }
+
+def getLocalProperty(propertyName) {
+    Properties properties = new Properties()
+    if (project.rootProject.file('local.properties').canRead()) {
+        properties.load(project.rootProject.file("local.properties").newDataInputStream())
+        return properties.getProperty(propertyName, '')
+    }
+    return ''
+}
+
+if (project.ext.has("artifactoryEnabled")
+        && project.ext.artifactoryEnabled) {
+    def ARTIFACTORY_USER_NAME = getLocalProperty('ARTIFACTORY_USER_NAME')
+    def ARTIFACTORY_PASSWORD = getLocalProperty('ARTIFACTORY_PASSWORD')
+
+    apply plugin: 'com.jfrog.artifactory'
+    apply plugin: 'maven-publish'
+    artifactoryPublish.skip = true
+    artifactoryPublish.dependsOn('build')
+
+    publishing {
+        publications {
+            aar(MavenPublication) {
+                groupId 'com.netflix.android.exoplayer' //put here your groupId
+                artifactId releaseArtifact //put here your artifactId
+                version "$releaseVersion.1" //put here your library version
+
+                // Tell maven to prepare the generated "*.aar" file for publishing
+                artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
+            }
+        }
+    }
+
+    artifactoryPublish {
+        publications(publishing.publications.aar)
+    }
+
+    artifactory {
+        clientConfig.setIncludeEnvVars(true)
+        clientConfig.info.addEnvironmentProperty('test.adding.dynVar', new Date().toString())
+
+        contextUrl = 'http://artifacts.netflix.com/'
+        publish {
+            repository {
+                repoKey = 'libs-releases-local'
+                username = ARTIFACTORY_USER_NAME
+                password = ARTIFACTORY_PASSWORD
+                // This is an optional section for configuring Ivy publication (when publishIvy = true).
+                ivy {
+                    ivyLayout = '[organization]/[module]/ivy-[revision].xml'
+                    artifactLayout = '[organization]/[module]/[revision]/[module]-[revision](-[classifier]).[ext]'
+                    mavenCompatible = true
+                    //Convert any dots in an [organization] layout value to path separators, similar to Maven's groupId-to-path conversion. True if not specified
+                }
+            }
+            defaults {
+                // Reference to Gradle publications defined in the build script.
+                // This is how we tell the Artifactory Plugin which artifacts should be
+                // published to Artifactory.
+                publishArtifacts = true
+                // Properties to be attached to the published artifacts.
+                properties = ['qa.level': 'basic', 'dev.team': 'core']
+                publishPom = true // Publish generated POM files to Artifactory (true by default)
+            }
+        }
+    }
+
+
+    artifactoryPublish {
+        doLast {
+            if (ARTIFACTORY_USER_NAME == '') {
+                throw new GradleException('ARTIFACTORY_USER_NAME not set in local.properties')
+            }
+            if (ARTIFACTORY_PASSWORD == '') {
+                throw new GradleException('ARTIFACTORY_PASSWORD not set in local.properties')
+            }
+        }
+    }
+}
