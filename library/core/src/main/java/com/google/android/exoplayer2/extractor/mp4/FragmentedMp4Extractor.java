@@ -39,6 +39,7 @@ import com.google.android.exoplayer2.metadata.emsg.EventMessage;
 import com.google.android.exoplayer2.metadata.emsg.EventMessageEncoder;
 import com.google.android.exoplayer2.text.cea.CeaUtil;
 import com.google.android.exoplayer2.util.Assertions;
+import com.google.android.exoplayer2.util.Fmp4TimestampAdjuster;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.NalUnitUtil;
@@ -140,7 +141,7 @@ public class FragmentedMp4Extractor implements Extractor {
   private final ParsableByteArray scratch;
 
   // Adjusts sample timestamps.
-  @Nullable private final TimestampAdjuster timestampAdjuster;
+  @Nullable private final Fmp4TimestampAdjuster timestampAdjuster;
 
   private final EventMessageEncoder eventMessageEncoder;
 
@@ -241,7 +242,7 @@ public class FragmentedMp4Extractor implements Extractor {
    */
   public FragmentedMp4Extractor(
       @Flags int flags,
-      @Nullable TimestampAdjuster timestampAdjuster,
+      @Nullable Fmp4TimestampAdjuster timestampAdjuster,
       @Nullable Track sideloadedTrack,
       List<Format> closedCaptionFormats,
       @Nullable TrackOutput additionalEmsgTrackOutput) {
