@@ -91,7 +91,7 @@ if (project.ext.has("artifactoryEnabled")
             aar(MavenPublication) {
                 groupId 'com.netflix.android.exoplayer' //put here your groupId
                 artifactId releaseArtifact //put here your artifactId
-                version "$releaseVersion.1" //put here your library version
+                version "$releaseVersion.2" //put here your library version
 
                 // Tell maven to prepare the generated "*.aar" file for publishing
                 artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
