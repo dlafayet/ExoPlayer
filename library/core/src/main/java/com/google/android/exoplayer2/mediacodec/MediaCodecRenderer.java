@@ -352,7 +352,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
   private boolean codecNeedsAdaptationWorkaroundBuffer;
   private boolean shouldSkipAdaptationWorkaroundOutputBuffer;
   private boolean codecNeedsEosPropagation;
-  protected ByteBuffer[] inputBuffers;
+  private ByteBuffer[] inputBuffers;
   private ByteBuffer[] outputBuffers;
   private long codecHotswapDeadlineMs;
   private int inputIndex;
@@ -992,21 +992,21 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
   }
 
   private void getCodecBuffers(MediaCodec codec) {
-    if (Util.SDK_INT < 21) {
+    if (Util.SDK_INT < 21 || requiresInputBuffers()) {
       inputBuffers = codec.getInputBuffers();
       outputBuffers = codec.getOutputBuffers();
     }
   }
 
   private void resetCodecBuffers() {
-    if (Util.SDK_INT < 21) {
+    if (Util.SDK_INT < 21 || requiresInputBuffers()) {
       inputBuffers = null;
       outputBuffers = null;
     }
   }
 
-  private ByteBuffer getInputBuffer(int inputIndex) {
-    if (Util.SDK_INT >= 21) {
+  protected ByteBuffer getInputBuffer(int inputIndex) {
+    if (Util.SDK_INT >= 21 && !requiresInputBuffers()) {
       return codec.getInputBuffer(inputIndex);
     } else {
       return inputBuffers[inputIndex];
@@ -1014,7 +1014,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
   }
 
   private ByteBuffer getOutputBuffer(int outputIndex) {
-    if (Util.SDK_INT >= 21) {
+    if (Util.SDK_INT >= 21 && !requiresInputBuffers()) {
       return codec.getOutputBuffer(outputIndex);
     } else {
       return outputBuffers[outputIndex];
@@ -1640,7 +1640,7 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
    * Processes a change in the output buffers.
    */
   private void processOutputBuffersChanged() {
-    if (Util.SDK_INT < 21) {
+    if (Util.SDK_INT < 21 || requiresInputBuffers()) {
       outputBuffers = codec.getOutputBuffers();
     }
   }
@@ -2055,5 +2055,13 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
     if(flushCodec && codec != null) {
       codec.flush();
     }
+  }
+
+  /**
+   * Custom renderers may require access to the input buffers - when we run in this mode,
+   * we maintain the buffer in inputBuffer[] and outputBuffers[]
+   */
+  protected boolean requiresInputBuffers() {
+    return false;
   }
 }
