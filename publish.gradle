@@ -68,6 +68,9 @@ static void addLicense(File pom) {
 }
 
 def getLocalProperty(propertyName) {
+    if (project.ext.has(propertyName)) {
+        return project.ext.get(propertyName)
+    }
     Properties properties = new Properties()
     if (project.rootProject.file('local.properties').canRead()) {
         properties.load(project.rootProject.file("local.properties").newDataInputStream())
@@ -80,6 +83,7 @@ if (project.ext.has("artifactoryEnabled")
         && project.ext.artifactoryEnabled) {
     def ARTIFACTORY_USER_NAME = getLocalProperty('ARTIFACTORY_USER_NAME')
     def ARTIFACTORY_PASSWORD = getLocalProperty('ARTIFACTORY_PASSWORD')
+    def buildNumber = project.ext.buildNumber
 
     apply plugin: 'com.jfrog.artifactory'
     apply plugin: 'maven-publish'
@@ -91,7 +95,7 @@ if (project.ext.has("artifactoryEnabled")
             aar(MavenPublication) {
                 groupId 'com.netflix.android.exoplayer' //put here your groupId
                 artifactId releaseArtifact //put here your artifactId
-                version "$releaseVersion.3" //put here your library version
+                version "$releaseVersion.$buildNumber" //put here your library version
 
                 // Tell maven to prepare the generated "*.aar" file for publishing
                 artifact("$buildDir/outputs/aar/${project.getName()}-release.aar")
