@@ -374,4 +374,5 @@ public class TextRenderer extends BaseRenderer implements Callback {
       releaseBuffers();
       decoder.flush();
     }
+  }
 }
