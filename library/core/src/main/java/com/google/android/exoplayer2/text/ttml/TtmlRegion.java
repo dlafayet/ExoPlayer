@@ -32,6 +32,8 @@ import com.google.android.exoplayer2.text.Cue;
   public final @Cue.TextSizeType int textSizeType;
   public final float textSize;
 
+  public final @Cue.AnchorType int positionAnchor;
+
   public TtmlRegion(String id) {
     this(
         id,
@@ -42,7 +44,8 @@ import com.google.android.exoplayer2.text.Cue;
         /* width= */ Cue.DIMEN_UNSET,
         /* height= */ Cue.DIMEN_UNSET,
         /* textSizeType= */ Cue.TYPE_UNSET,
-        /* textSize= */ Cue.DIMEN_UNSET);
+        /* textSize= */ Cue.DIMEN_UNSET,
+        /* positionAnchor= */ Cue.TYPE_UNSET);
   }
 
   public TtmlRegion(
@@ -54,7 +57,8 @@ import com.google.android.exoplayer2.text.Cue;
       float width,
       float height,
       int textSizeType,
-      float textSize) {
+      float textSize,
+      @Cue.AnchorType int postionAnchor) {
     this.id = id;
     this.position = position;
     this.line = line;
@@ -64,6 +68,7 @@ import com.google.android.exoplayer2.text.Cue;
     this.height = height;
     this.textSizeType = textSizeType;
     this.textSize = textSize;
+    this.positionAnchor = postionAnchor;
   }
 
 }

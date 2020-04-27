@@ -16,6 +16,7 @@
 package com.google.android.exoplayer2.text.ttml;
 
 import android.text.Layout;
+
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.text.SimpleSubtitleDecoder;
@@ -25,6 +26,11 @@ import com.google.android.exoplayer2.util.ColorParser;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.Util;
 import com.google.android.exoplayer2.util.XmlPullParserUtil;
+
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
+import org.xmlpull.v1.XmlPullParserFactory;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -32,9 +38,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.xmlpull.v1.XmlPullParser;
-import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlPullParserFactory;
 
 /**
  * A {@link SimpleSubtitleDecoder} for TTML supporting the DFXP presentation profile. Features
@@ -77,7 +80,7 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
   private static final Pattern OFFSET_TIME =
       Pattern.compile("^([0-9]+(?:\\.[0-9]+)?)(h|m|s|ms|f|t)$");
   private static final Pattern FONT_SIZE = Pattern.compile("^(([0-9]*.)?[0-9]+)(px|em|%)$");
-  private static final Pattern PERCENTAGE_COORDINATES =
+  static final Pattern PERCENTAGE_COORDINATES =
       Pattern.compile("^(\\d+\\.?\\d*?)% (\\d+\\.?\\d*?)%$");
   private static final Pattern PIXEL_COORDINATES =
       Pattern.compile("^(\\d+\\.?\\d*?)px (\\d+\\.?\\d*?)px$");
@@ -321,10 +324,60 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
       return null;
     }
 
+    /*
+     * SPY-18615
+     * region attributes can be defined in different ways, on or another but not mixed:
+     * 1,
+     * <region tts:displayAlign="before" xml:id="region1"/>
+     * 2,
+     *  <region xml:id="Region_02">
+     *  <style tts:displayAlign="after"/>
+     *  </region>
+     */
+    String regionOrigin = XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_ORIGIN);
+    String regionExtent = XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_EXTENT);
+    String displayAlign =
+        XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_DISPLAY_ALIGN);
+    String textAlign = XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_TEXT_ALIGN);
+    //SHCHEN-TODO: can we consolidate this with teh code parsing style
+    if (displayAlign == null && regionExtent == null && regionOrigin == null && textAlign == null) {
+      try {
+        do {
+          xmlParser.next();
+          if (XmlPullParserUtil.isStartTag(xmlParser, TtmlNode.TAG_STYLE)) {
+            String origin =
+                XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_ORIGIN);
+            if (origin != null) {
+              regionOrigin = origin;
+              continue;
+            }
+            String extent =
+                XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_EXTENT);
+            if (extent != null) {
+              regionExtent = extent;
+              continue;
+            }
+            String tAlign =
+                XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_TEXT_ALIGN);
+            if (tAlign != null) {
+              textAlign = tAlign;
+              continue;
+            }
+            String dAlign =
+                XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_DISPLAY_ALIGN);
+            if (dAlign != null) {
+              displayAlign = dAlign;
+            }
+          }
+        } while (!XmlPullParserUtil.isEndTag(xmlParser, TtmlNode.TAG_REGION));
+      } catch (XmlPullParserException | IOException e) {
+        // ignore exception
+      }
+    }
+
     float position;
     float line;
 
-    String regionOrigin = XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_ORIGIN);
     if (regionOrigin != null) {
       Matcher originPercentageMatcher = PERCENTAGE_COORDINATES.matcher(regionOrigin);
       Matcher originPixelMatcher = PIXEL_COORDINATES.matcher(regionOrigin);
@@ -356,18 +409,16 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
         return null;
       }
     } else {
-      Log.w(TAG, "Ignoring region without an origin");
-      return null;
+      Log.w(TAG, "Use default region without an origin");
       // TODO: Should default to top left as below in this case, but need to fix
       // https://github.com/google/ExoPlayer/issues/2953 first.
       // Origin is omitted. Default to top left.
-      // position = 0;
-      // line = 0;
+      position = 0;
+      line = 0;
     }
 
     float width;
     float height;
-    String regionExtent = XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_EXTENT);
     if (regionExtent != null) {
       Matcher extentPercentageMatcher = PERCENTAGE_COORDINATES.matcher(regionExtent);
       Matcher extentPixelMatcher = PIXEL_COORDINATES.matcher(regionExtent);
@@ -399,18 +450,15 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
         return null;
       }
     } else {
-      Log.w(TAG, "Ignoring region without an extent");
-      return null;
+      Log.w(TAG, "Use default without an extent");
       // TODO: Should default to extent of parent as below in this case, but need to fix
       // https://github.com/google/ExoPlayer/issues/2953 first.
       // Extent is omitted. Default to extent of parent.
-      // width = 1;
-      // height = 1;
+      width = 1;
+      height = 1;
     }
 
     @Cue.AnchorType int lineAnchor = Cue.ANCHOR_TYPE_START;
-    String displayAlign = XmlPullParserUtil.getAttributeValue(xmlParser,
-        TtmlNode.ATTR_TTS_DISPLAY_ALIGN);
     if (displayAlign != null) {
       switch (Util.toLowerInvariant(displayAlign)) {
         case "center":
@@ -426,6 +474,22 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
           break;
       }
     }
+    @Cue.AnchorType int textAlignType = Cue.ANCHOR_TYPE_MIDDLE;
+    if(textAlign != null) {
+      switch (Util.toLowerInvariant(textAlign)) {
+        case TtmlNode.LEFT:
+        case TtmlNode.START:
+          textAlignType = Cue.ANCHOR_TYPE_START;
+          break;
+        case TtmlNode.RIGHT:
+        case TtmlNode.END:
+          textAlignType = Cue.ANCHOR_TYPE_END;
+          break;
+        //case TtmlNode.CENTER:
+        default:
+          break;
+      }
+    }
 
     float regionTextHeight = 1.0f / cellResolution.rows;
     return new TtmlRegion(
@@ -437,7 +501,8 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
         width,
         height,
         /* textSizeType= */ Cue.TEXT_SIZE_TYPE_FRACTIONAL_IGNORE_PADDING,
-        /* textSize= */ regionTextHeight);
+        /* textSize= */ regionTextHeight,
+        textAlignType);
   }
 
   private String[] parseStyleIds(String parentStyleIds) {

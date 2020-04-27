@@ -15,13 +15,16 @@
  */
 package com.google.android.exoplayer2.extractor.mp4;
 
-import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
+import com.google.android.exoplayer2.util.Util;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 /**
  * Encapsulates information describing an MP4 track.
@@ -127,6 +130,19 @@ public final class Track {
   public TrackEncryptionBox getSampleDescriptionEncryptionBox(int sampleDescriptionIndex) {
     return sampleDescriptionEncryptionBoxes == null ? null
         : sampleDescriptionEncryptionBoxes[sampleDescriptionIndex];
+  }
+
+  /**
+   * @return last media time offset in ms as described in elst (as track time 0)
+   * -1 if there is no valid edts. otherwise mediaTime if last edit
+   */
+  //Netflix specific SPY-16883
+  public long getMediaTimeOffset() {
+    if (editListMediaTimes != null && editListMediaTimes.length > 0) {
+      return Util
+          .scaleLargeTimestamp(editListMediaTimes[editListMediaTimes.length - 1], 1000, timescale);
+    }
+    return -1;
   }
 
   // incompatible types in argument.

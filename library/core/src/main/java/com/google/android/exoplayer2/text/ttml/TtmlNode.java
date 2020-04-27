@@ -17,13 +17,15 @@ package com.google.android.exoplayer2.text.ttml;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.text.Layout.Alignment;
 import android.text.SpannableStringBuilder;
 import android.util.Base64;
 import android.util.Pair;
-import androidx.annotation.Nullable;
+
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.util.Assertions;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +33,11 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+
+import androidx.annotation.Nullable;
+
+import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COORDINATES;
 
 /**
  * A package internal representation of TTML node.
@@ -95,6 +102,15 @@ import java.util.TreeSet;
 
   private List<TtmlNode> children;
 
+  private static class RegionOverride {
+    float line = Cue.DIMEN_UNSET;
+    float position = Cue.DIMEN_UNSET;
+    float width = Cue.DIMEN_UNSET;
+    float height = Cue.DIMEN_UNSET;
+  }
+
+  private RegionOverride regionOverride;
+
   public static TtmlNode buildTextNode(String text) {
     return new TtmlNode(
         /* tag= */ null,
@@ -119,6 +135,12 @@ import java.util.TreeSet;
         tag, /* text= */ null, startTimeUs, endTimeUs, style, styleIds, regionId, imageId);
   }
 
+  public static TtmlNode buildNode(String tag, long startTimeUs, long endTimeUs,
+      TtmlStyle style, String[] styleIds, String regionId, String origin, String extent) {
+    return new TtmlNode(tag, null, startTimeUs, endTimeUs, style, styleIds, regionId, origin,
+        extent);
+  }
+
   private TtmlNode(
       @Nullable String tag,
       @Nullable String text,
@@ -139,6 +161,39 @@ import java.util.TreeSet;
     this.regionId = Assertions.checkNotNull(regionId);
     nodeStartsByRegion = new HashMap<>();
     nodeEndsByRegion = new HashMap<>();
+  }
+
+  private TtmlNode(String tag, String text, long startTimeUs, long endTimeUs,
+      TtmlStyle style, String[] styleIds, String regionId, String origin, String extent) {
+    this(tag, text, startTimeUs, endTimeUs, style, styleIds, regionId, null);
+    if (origin != null) {
+      Matcher originMatcher = PERCENTAGE_COORDINATES.matcher(origin);
+      if (originMatcher.matches()) {
+        try {
+          if (regionOverride == null) {
+            regionOverride = new RegionOverride();
+          }
+          regionOverride.position = Float.parseFloat(originMatcher.group(1)) / 100f;
+          regionOverride.line = Float.parseFloat(originMatcher.group(2)) / 100f;
+        } catch (NumberFormatException e) {
+
+        }
+      }
+    }
+    if (extent != null) {
+      Matcher extentMatcher = PERCENTAGE_COORDINATES.matcher(extent);
+      if (extentMatcher.matches()) {
+        try {
+          if (regionOverride == null) {
+            regionOverride = new RegionOverride();
+          }
+          regionOverride.width = Float.parseFloat(extentMatcher.group(1)) / 100f;
+          regionOverride.height = Float.parseFloat(extentMatcher.group(2)) / 100f;
+        } catch (NumberFormatException e) {
+
+        }
+      }
+    }
   }
 
   public boolean isActive(long timeUs) {
@@ -210,7 +265,8 @@ import java.util.TreeSet;
     traverseForImage(timeUs, regionId, regionImageOutputs);
 
     TreeMap<String, SpannableStringBuilder> regionTextOutputs = new TreeMap<>();
-    traverseForText(timeUs, false, regionId, regionTextOutputs);
+    TreeMap<String, RegionOverride> regionOverrides = new TreeMap<>();
+    traverseForText(timeUs, false, regionId, regionTextOutputs, regionOverrides);
     traverseForStyle(timeUs, globalStyles, regionTextOutputs);
 
     List<Cue> cues = new ArrayList<>();
@@ -241,10 +297,27 @@ import java.util.TreeSet;
     // Create text based cues.
     for (Entry<String, SpannableStringBuilder> entry : regionTextOutputs.entrySet()) {
       TtmlRegion region = regionMap.get(entry.getKey());
+      RegionOverride override = regionOverrides.get(entry.getKey());
+      float cueLine = region.line;
+      if(override != null && override.line != Cue.DIMEN_UNSET) {
+        if (region.lineAnchor == Cue.ANCHOR_TYPE_START) {
+          cueLine = override.line;
+        } else if(region.lineAnchor == Cue.ANCHOR_TYPE_END) {
+          cueLine = override.height != Cue.DIMEN_UNSET ? override.line + override.height : 1f;
+        } else {
+          cueLine = override.height != Cue.DIMEN_UNSET ? override.line + override.height / 2 : override.line / 2 + .5f;
+        }
+      }
+      Alignment textAlignment = region.positionAnchor == Cue.ANCHOR_TYPE_START ? Alignment.ALIGN_NORMAL :
+          region.positionAnchor == Cue.ANCHOR_TYPE_END ? Alignment.ALIGN_OPPOSITE : Alignment.ALIGN_CENTER;
+      float cuePosition = override != null && override.position != Cue.DIMEN_UNSET ? override.position : region.position;
+      float cueWidth = override != null && override.width != Cue.DIMEN_UNSET ? override.width : region.width;
+      cues.add(new Cue(cleanUpText(entry.getValue()), textAlignment, cueLine, region.lineType,
+          region.lineAnchor, cuePosition, Cue.TYPE_UNSET, cueWidth));
       cues.add(
           new Cue(
               cleanUpText(entry.getValue()),
-              /* textAlignment= */ null,
+              textAlignment,
               region.line,
               region.lineType,
               region.lineAnchor,
@@ -274,7 +347,8 @@ import java.util.TreeSet;
       long timeUs,
       boolean descendsPNode,
       String inheritedRegion,
-      Map<String, SpannableStringBuilder> regionOutputs) {
+      Map<String, SpannableStringBuilder> regionOutputs,
+      Map<String, RegionOverride> regionOverrides) {
     nodeStartsByRegion.clear();
     nodeEndsByRegion.clear();
     if (TAG_METADATA.equals(tag)) {
@@ -297,10 +371,11 @@ import java.util.TreeSet;
       boolean isPNode = TAG_P.equals(tag);
       for (int i = 0; i < getChildCount(); i++) {
         getChild(i).traverseForText(timeUs, descendsPNode || isPNode, resolvedRegionId,
-            regionOutputs);
+            regionOutputs, regionOverrides);
       }
       if (isPNode) {
         TtmlRenderUtil.endParagraph(getRegionOutput(resolvedRegionId, regionOutputs));
+        if(regionOverride != null) regionOverrides.put(resolvedRegionId, regionOverride);
       }
 
       for (Entry<String, SpannableStringBuilder> entry : regionOutputs.entrySet()) {
