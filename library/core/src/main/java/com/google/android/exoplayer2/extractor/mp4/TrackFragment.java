@@ -104,6 +104,10 @@ import java.io.IOException;
    */
   public long nextFragmentDecodeTime;
 
+  //Netflix specific SPY-16619
+  //it is Netflix specific "edts/elst" to map media time to track time with assumption of single "elst" entry
+  public long mediaTimeOffset = 0;
+
   /**
    * Resets the fragment.
    * <p>
@@ -187,7 +191,7 @@ import java.io.IOException;
   }
 
   public long getSamplePresentationTime(int index) {
-    return sampleDecodingTimeTable[index] + sampleCompositionTimeOffsetTable[index];
+    return sampleDecodingTimeTable[index] + sampleCompositionTimeOffsetTable[index] - mediaTimeOffset;
   }
 
   /** Returns whether the sample at the given index has a subsample encryption table. */

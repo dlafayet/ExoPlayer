@@ -559,9 +559,15 @@ public class SampleQueue implements TrackOutput {
       if (loadingFinished || isLastSampleQueued) {
         buffer.setFlags(C.BUFFER_FLAG_END_OF_STREAM);
         return C.RESULT_BUFFER_READ;
-      } else if (upstreamFormat != null && (formatRequired || upstreamFormat != downstreamFormat)) {
-        onFormatResult(Assertions.checkNotNull(upstreamFormat), formatHolder);
-        return C.RESULT_FORMAT_READ;
+      // SPY-15182 - when two format switches occur back to back without any media being downloaded
+      // (for example, we choose one bitrate, download its header, and then choose another bitrate),
+      // a playback error can occur. to avoid this, we defer switching formats until the first
+      // sample is available to guarantee there is always a sample between two format reads (see
+      // the "return C.RESULT_FORMAT_READ" a few lines below)
+//      } else if (upstreamFormat != null && (formatRequired || upstreamFormat != downstreamFormat)) {
+//        onFormatResult(Assertions.checkNotNull(upstreamFormat), formatHolder);
+//        return C.RESULT_FORMAT_READ;
+      // END SPY-15182
       } else {
         return C.RESULT_NOTHING_READ;
       }

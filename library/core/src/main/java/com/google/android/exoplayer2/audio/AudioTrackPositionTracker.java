@@ -15,20 +15,24 @@
  */
 package com.google.android.exoplayer2.audio;
 
-import static com.google.android.exoplayer2.util.Util.castNonNull;
-
 import android.media.AudioTimestamp;
 import android.media.AudioTrack;
+import android.os.Build;
 import android.os.SystemClock;
-import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
+
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Util;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Method;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+
+import static com.google.android.exoplayer2.util.Util.castNonNull;
 
 /**
  * Wraps an {@link AudioTrack}, exposing a position based on {@link
@@ -160,6 +164,9 @@ import java.lang.reflect.Method;
   private long stopPlaybackHeadPosition;
   private long endPlaybackHeadPosition;
 
+  private boolean needPlaybackHeadPositionWorkaround;
+  private long frameCountBeforeWrapAround;
+
   /**
    * Creates a new audio track position tracker.
    *
@@ -207,6 +214,8 @@ import java.lang.reflect.Method;
     stopTimestampUs = C.TIME_UNSET;
     forceResetWorkaroundTimeMs = C.TIME_UNSET;
     latencyUs = 0;
+    needPlaybackHeadPositionWorkaround = needPlaybackHeadPositionWorkaround();
+    frameCountBeforeWrapAround = 0;
   }
 
   public long getCurrentPositionUs(boolean sourceEnded) {
@@ -514,6 +523,13 @@ import java.lang.reflect.Method;
     } else {
       rawPlaybackHeadPosition &= 0xFFFFFFFFL;
     }
+    if (needPlaybackHeadPositionWorkaround) {
+      if (lastRawPlaybackHeadPosition > rawPlaybackHeadPosition) {
+        frameCountBeforeWrapAround = lastRawPlaybackHeadPosition;
+      }
+      lastRawPlaybackHeadPosition = rawPlaybackHeadPosition;
+      return (frameCountBeforeWrapAround + rawPlaybackHeadPosition);
+    }
     // long rawPlaybackHeadPosition = 0xFFFFFFFFL & audioTrack.getPlaybackHeadPosition();
     if (needsPassthroughWorkarounds) {
       // Work around an issue with passthrough/direct AudioTracks on platform API versions 21/22
@@ -549,5 +565,11 @@ import java.lang.reflect.Method;
     }
     lastRawPlaybackHeadPosition = rawPlaybackHeadPosition;
     return rawPlaybackHeadPosition + (rawPlaybackHeadWrapCount << 32);
+  }
+
+  static boolean needPlaybackHeadPositionWorkaround() {
+    //SPY-11355
+    return (Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+        Build.MODEL.equalsIgnoreCase("SM-J320M"));
   }
 }

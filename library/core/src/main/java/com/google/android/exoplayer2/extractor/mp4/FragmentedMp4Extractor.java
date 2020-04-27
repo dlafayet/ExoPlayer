@@ -17,8 +17,7 @@ package com.google.android.exoplayer2.extractor.mp4;
 
 import android.util.Pair;
 import android.util.SparseArray;
-import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
+
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.ParserException;
@@ -46,6 +45,7 @@ import com.google.android.exoplayer2.util.NalUnitUtil;
 import com.google.android.exoplayer2.util.ParsableByteArray;
 import com.google.android.exoplayer2.util.TimestampAdjuster;
 import com.google.android.exoplayer2.util.Util;
+
 import java.io.IOException;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
@@ -56,6 +56,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 /** Extracts data from the FMP4 container format. */
 @SuppressWarnings("ConstantField")
@@ -441,7 +444,16 @@ public class FragmentedMp4Extractor implements Extractor {
     if (!containerAtoms.isEmpty()) {
       containerAtoms.peek().add(leaf);
     } else if (leaf.type == Atom.TYPE_sidx) {
-      Pair<Long, ChunkIndex> result = parseSidx(leaf.data, inputPosition);
+      //SPY-16883
+      //Netflix specific assumption:
+      // 1, we should have trak and edts parsed, only contains one trak
+      // 2, one edit in elst
+
+      TrackBundle tb = trackBundles.valueAt(0);
+      Track track = tb != null? tb.track : null;
+      Assertions.checkNotNull(track);
+      Pair<Long, ChunkIndex> result = parseSidx(leaf.data, inputPosition, track.getMediaTimeOffset() == -1 ? timestampAdjuster : null);
+      // Pair<Long, ChunkIndex> result = parseSidx(leaf.data, inputPosition);
       segmentIndexEarliestPresentationTimeUs = result.first;
       extractorOutput.seekMap(result.second);
       haveOutputSeekMap = true;
@@ -1106,7 +1118,7 @@ public class FragmentedMp4Extractor implements Extractor {
    * @return A pair consisting of the earliest presentation time in microseconds, and the parsed
    *     {@link ChunkIndex}.
    */
-  private static Pair<Long, ChunkIndex> parseSidx(ParsableByteArray atom, long inputPosition)
+  private static Pair<Long, ChunkIndex> parseSidx(ParsableByteArray atom, long inputPosition, Fmp4TimestampAdjuster timestampAdjuster)
       throws ParserException {
     atom.setPosition(Atom.HEADER_SIZE);
     int fullAtom = atom.readInt();
@@ -1125,6 +1137,10 @@ public class FragmentedMp4Extractor implements Extractor {
     }
     long earliestPresentationTimeUs = Util.scaleLargeTimestamp(earliestPresentationTime,
         C.MICROS_PER_SECOND, timescale);
+    if (timestampAdjuster != null) {
+      earliestPresentationTimeUs =
+          timestampAdjuster.adjustSampleTimestamp(earliestPresentationTimeUs);
+    }
 
     atom.skipBytes(2);
 
@@ -1271,7 +1287,7 @@ public class FragmentedMp4Extractor implements Extractor {
     TrackOutput output = currentTrackBundle.output;
     int sampleIndex = currentTrackBundle.currentSampleIndex;
     long sampleTimeUs = fragment.getSamplePresentationTime(sampleIndex) * 1000L;
-    if (timestampAdjuster != null) {
+    if (timestampAdjuster != null && track.getMediaTimeOffset() == -1) {
       sampleTimeUs = timestampAdjuster.adjustSampleTimestamp(sampleTimeUs);
     }
     if (track.nalUnitLengthFieldLength != 0) {
@@ -1489,6 +1505,7 @@ public class FragmentedMp4Extractor implements Extractor {
       this.defaultSampleValues = Assertions.checkNotNull(defaultSampleValues);
       output.format(track.format);
       reset();
+      fragment.mediaTimeOffset = track.getMediaTimeOffset() != -1 ? track.getMediaTimeOffset() : 0;
     }
 
     public void updateDrmInitData(DrmInitData drmInitData) {
