@@ -312,18 +312,16 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
           region.positionAnchor == Cue.ANCHOR_TYPE_END ? Alignment.ALIGN_OPPOSITE : Alignment.ALIGN_CENTER;
       float cuePosition = override != null && override.position != Cue.DIMEN_UNSET ? override.position : region.position;
       float cueWidth = override != null && override.width != Cue.DIMEN_UNSET ? override.width : region.width;
-      cues.add(new Cue(cleanUpText(entry.getValue()), textAlignment, cueLine, region.lineType,
-          region.lineAnchor, cuePosition, Cue.TYPE_UNSET, cueWidth));
       cues.add(
           new Cue(
               cleanUpText(entry.getValue()),
               textAlignment,
-              region.line,
+              cueLine,
               region.lineType,
               region.lineAnchor,
-              region.position,
+              cuePosition,
               /* positionAnchor= */ Cue.TYPE_UNSET,
-              region.width,
+              cueWidth,
               region.textSizeType,
               region.textSize));
     }
