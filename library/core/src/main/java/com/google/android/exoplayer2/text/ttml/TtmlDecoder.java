@@ -613,6 +613,7 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     String[] styleIds = null;
     int attributeCount = parser.getAttributeCount();
     TtmlStyle style = parseStyleAttributes(parser, null);
+    String origin = null, extent = null;
     for (int i = 0; i < attributeCount; i++) {
       String attr = parser.getAttributeName(i);
       String value = parser.getAttributeValue(i);
@@ -639,6 +640,12 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
             // the anonymous region.
             regionId = value;
           }
+          break;
+        case TtmlNode.ATTR_TTS_EXTENT:
+          extent = value;
+          break;
+        case TtmlNode.ATTR_TTS_ORIGIN:
+          origin = value;
           break;
         case ATTR_IMAGE:
           // Parse URI reference only if refers to an element in the same document (it must start
@@ -670,7 +677,7 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
       }
     }
     return TtmlNode.buildNode(
-        parser.getName(), startTime, endTime, style, styleIds, regionId, imageId);
+        parser.getName(), startTime, endTime, style, styleIds, regionId, imageId, origin, extent);
   }
 
   private static boolean isSupportedTag(String tag) {

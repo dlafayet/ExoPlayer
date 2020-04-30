@@ -135,6 +135,20 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
         tag, /* text= */ null, startTimeUs, endTimeUs, style, styleIds, regionId, imageId);
   }
 
+  public static TtmlNode buildNode(
+      @Nullable String tag,
+      long startTimeUs,
+      long endTimeUs,
+      @Nullable TtmlStyle style,
+      @Nullable String[] styleIds,
+      String regionId,
+      @Nullable String imageId,
+      String origin,
+      String extent) {
+    return new TtmlNode(
+        tag, /* text= */ null, startTimeUs, endTimeUs, style, styleIds, regionId, imageId, origin, extent);
+  }
+
   public static TtmlNode buildNode(String tag, long startTimeUs, long endTimeUs,
       TtmlStyle style, String[] styleIds, String regionId, String origin, String extent) {
     return new TtmlNode(tag, null, startTimeUs, endTimeUs, style, styleIds, regionId, origin,
@@ -161,6 +175,48 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
     this.regionId = Assertions.checkNotNull(regionId);
     nodeStartsByRegion = new HashMap<>();
     nodeEndsByRegion = new HashMap<>();
+  }
+
+  private TtmlNode(
+      @Nullable String tag,
+      @Nullable String text,
+      long startTimeUs,
+      long endTimeUs,
+      @Nullable TtmlStyle style,
+      @Nullable String[] styleIds,
+      String regionId,
+      @Nullable String imageId,
+      String origin,
+      String extent) {
+    this(tag, text, startTimeUs, endTimeUs, style, styleIds, regionId, imageId);
+    if(origin != null) {
+      Matcher originMatcher = PERCENTAGE_COORDINATES.matcher(origin);
+      if (originMatcher.matches()) {
+        try {
+          if(regionOverride == null) {
+            regionOverride = new RegionOverride();
+          }
+          regionOverride.position = Float.parseFloat(originMatcher.group(1)) / 100f;
+          regionOverride.line = Float.parseFloat(originMatcher.group(2)) / 100f;
+        } catch (NumberFormatException e) {
+
+        }
+      }
+    }
+    if(extent != null) {
+      Matcher extentMatcher = PERCENTAGE_COORDINATES.matcher(extent);
+      if (extentMatcher.matches()) {
+        try {
+          if(regionOverride == null) {
+            regionOverride = new RegionOverride();
+          }
+          regionOverride.width = Float.parseFloat(extentMatcher.group(1)) / 100f;
+          regionOverride.height = Float.parseFloat(extentMatcher.group(2)) / 100f;
+        } catch (NumberFormatException e) {
+
+        }
+      }
+    }
   }
 
   private TtmlNode(String tag, String text, long startTimeUs, long endTimeUs,
