@@ -748,15 +748,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
             periodPositionUs = playbackInfo.positionUs;
             // SPY-18531: seek to position is same as current playback position, we need the event
             // to help generate UI transition from seeking to playing state
+            playbackInfoUpdate.incrementPendingOperationAcks(/* operationAcks= */ -1);
             eventHandler
-                    .obtainMessage(
-                            MSG_PLAYBACK_INFO_CHANGED,
-                            playbackInfoUpdate.operationAcks,
-                            playbackInfoUpdate.positionDiscontinuity
-                                    ? playbackInfoUpdate.discontinuityReason
-                                    : C.INDEX_UNSET,
-                            playbackInfo)
-                    .sendToTarget();
+                .obtainMessage(
+                    MSG_PLAYBACK_INFO_CHANGED,
+                    /* operationAcks */ 1,
+                    /* positionDiscontinuityReason */ C.INDEX_UNSET,
+                    playbackInfo)
+                .sendToTarget();
             return;
           }
         }
