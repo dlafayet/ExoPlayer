@@ -632,6 +632,11 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
         if (Util.SDK_INT >= 23 && surface != null && !codecNeedsSetOutputSurfaceWorkaround) {
           setOutputSurfaceV23(codec, surface);
         } else {
+          // nflx - clear any input buffers for our async renderer - they are no longer valid
+          // test this by playing video, hitting power button (clearing surface), and turn back on
+          // if this is broken, you will rarely see renderer errors when turning back on
+          clearInput(false);
+          // end nflx
           releaseCodec();
           maybeInitCodec();
         }
