@@ -91,7 +91,7 @@ public abstract class SimpleDecoderVideoRenderer extends BaseRenderer {
   @Nullable private VideoDecoderOutputBufferRenderer outputBufferRenderer;
   @C.VideoOutputMode private int outputMode;
 
-  @Nullable protected DrmSession<ExoMediaCrypto> decoderDrmSession;
+  @Nullable private DrmSession<ExoMediaCrypto> decoderDrmSession;
   @Nullable private DrmSession<ExoMediaCrypto> sourceDrmSession;
 
   @ReinitializationState private int decoderReinitializationState;
