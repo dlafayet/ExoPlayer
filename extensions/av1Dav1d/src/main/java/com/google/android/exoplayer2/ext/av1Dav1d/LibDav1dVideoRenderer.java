@@ -20,6 +20,7 @@ import static java.lang.Runtime.getRuntime;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.view.Surface;
+
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlaybackException;
@@ -42,14 +43,12 @@ import com.google.android.exoplayer2.video.VideoDecoderOutputBufferRenderer;
 import com.google.android.exoplayer2.video.VideoRendererEventListener;
 
 /**
- * Decodes and renders video using libgav1 decoder.
+ * Decodes and renders video using libDav1d decoder.
  *
  * <p>This renderer accepts the following messages sent via {@link ExoPlayer#createMessage(Target)}
  * on the playback thread:
  *
  * <ul>
- *   <li>Message with type {@link C#MSG_SET_SURFACE} to set the output surface. The message payload
- *       should be the target {@link Surface}, or null.
  *   <li>Message with type {@link C#MSG_SET_VIDEO_DECODER_OUTPUT_BUFFER_RENDERER} to set the output
  *       buffer renderer. The message payload should be the target {@link
  *       VideoDecoderOutputBufferRenderer}, or null.
@@ -60,13 +59,13 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
   static final String TAG = "LibDav1dVideoRenderer";
 
   protected static final int DEFAULT_NUM_OF_INPUT_BUFFERS = 4;
-  // private static final int DEFAULT_NUM_OF_INPUT_BUFFERS = 8;   // todo: vivian from vo library
+  // private static final int DEFAULT_NUM_OF_INPUT_BUFFERS = 8;   // ref from vo library
   protected static final int DEFAULT_NUM_OF_OUTPUT_BUFFERS = 4;
-  // private static final int DEFAULT_NUM_OF_OUTPUT_BUFFERS = 16;   // todo: vivian from vo library
+  // private static final int DEFAULT_NUM_OF_OUTPUT_BUFFERS = 16;   // ref from vo library
   /* Default size based on 720p resolution video compressed by a factor of two. */
   protected static final int DEFAULT_INPUT_BUFFER_SIZE =
       Util.ceilDivide(1280, 64) * Util.ceilDivide(720, 64) * (64 * 64 * 3 / 2) / 2;
-  // todo: vivian - buffer size from Vo library
+  //  buffer size from Vo library
   //  protected static final int INITIAL_INPUT_BUFFER_SIZE = 768 * 1024; // Value based on cs/SoftVo.cpp.
 
   private static final int RENDER_THRESHOLD = 41;
@@ -82,7 +81,7 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
 
   private final int threads;
 
-  @Nullable private Dav1dDecoder decoder;
+  @Nullable protected Dav1dDecoder decoder;
 
   private long rendererStartTime;
   private long lastFrameRenderedTime;
@@ -98,7 +97,6 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
   private int[] droppedFramesStats = new int[5];
   private int renderedFrameCountInMeasureWindow;
   private int droppedFrameCountInMeasureWindow;
-
 
   /**
    * Creates a LibDav1dVideoRenderer.
@@ -153,7 +151,7 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
         eventHandler,
         eventListener,
         maxDroppedFramesToNotify,
-        /* drmSessionManager= */ null,
+        null,
         /* playClearSamplesWithoutKeys= */ false);
     this.threads = threads;
     this.numInputBuffers = numInputBuffers;
@@ -163,16 +161,11 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
   @Override
   protected int supportsFormatInternal(
       @Nullable DrmSessionManager<ExoMediaCrypto> drmSessionManager, Format format) {
-    // TODO: vivian gav1 uses av01 instead of AV1 as mimeType. need to map, might be okay
     if (!MimeTypes.VIDEO_AV1.equalsIgnoreCase(format.sampleMimeType)
         || !Dav1dLibrary.isAvailable()) {
       return RendererCapabilities.create(FORMAT_UNSUPPORTED_TYPE);
     }
-    // TODO: vivian we drm is handled from InApp. currently skipping
-    /*
-    if (!supportsFormatDrm(drmSessionManager, format.drmInitData)) {
-      return RendererCapabilities.create(FORMAT_UNSUPPORTED_DRM);
-    }*/
+    Log.d(TAG, format.sampleMimeType + " supported");
     return RendererCapabilities.create(FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED);
   }
 
@@ -184,6 +177,7 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
       createDecoder(Format format, @Nullable ExoMediaCrypto mediaCrypto)
           throws VideoDecoderException {
     TraceUtil.beginSection("createDav1dDecoder");
+    Log.d(TAG, "Create Dav1dDecoder");
     int initialInputBufferSize =
         format.maxInputSize != Format.NO_VALUE ? format.maxInputSize : DEFAULT_INPUT_BUFFER_SIZE;
     Dav1dDecoder decoder =
