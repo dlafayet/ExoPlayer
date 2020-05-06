@@ -49,7 +49,7 @@ ext {
 }
 apply from: '../../javadoc_library.gradle'
 ext {
-    releaseArtifact = 'extension-av1David'
+    releaseArtifact = 'extension-av1Dav1d'
     releaseDescription = 'dav1d AV1 extension for ExoPlayer.'
 }
 apply from: '../../publish.gradle'
