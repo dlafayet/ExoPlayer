@@ -727,6 +727,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
   }
 
   private void notifyListeners(Runnable listenerNotificationRunnable) {
+    // SPY-31420 - some exoplayer access is still not on same thread - this can lead to races
+    // avoid this by posting to correct thread if not on it already. this should be removed when
+    // all calls into exoplayer are on the correct thread
+    if (Looper.myLooper() != eventHandler.getLooper()) {
+      eventHandler.post(() -> notifyListeners(listenerNotificationRunnable));
+      return;
+    }
+    // END SPY-31420
     boolean isRunningRecursiveListenerNotification = !pendingListenerNotifications.isEmpty();
     pendingListenerNotifications.addLast(listenerNotificationRunnable);
     if (isRunningRecursiveListenerNotification) {
