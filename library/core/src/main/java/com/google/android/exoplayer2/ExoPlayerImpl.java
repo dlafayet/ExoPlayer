@@ -727,6 +727,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
   }
 
   private void notifyListeners(Runnable listenerNotificationRunnable) {
+    // SPY-31420 - some exoplayer access is still not on same thread - this can lead to races
+    // avoid this by posting to correct thread if not on it already. this should be removed when
+    // all calls into exoplayer are on the correct thread
+    if (Looper.myLooper() != eventHandler.getLooper()) {
+      eventHandler.post(() -> notifyListeners(listenerNotificationRunnable));
+      return;
+    }
+    // END SPY-31420
     boolean isRunningRecursiveListenerNotification = !pendingListenerNotifications.isEmpty();
     pendingListenerNotifications.addLast(listenerNotificationRunnable);
     if (isRunningRecursiveListenerNotification) {
@@ -836,6 +844,17 @@ import java.util.concurrent.CopyOnWriteArrayList;
       if (seekProcessed) {
         invokeAll(listenerSnapshot, EventListener::onSeekProcessed);
       }
+      // NFLX - we do not process seeks if new position is same as existing. however,
+      // we need to generate an event to inform the UI that the seek is over. this case
+      // can be determined when the event is processing a seek and the playback state is
+      // PLAYING before and PLAYING after (it hasn't changed at all)
+      if (!playbackStateChanged && seekProcessed && playWhenReady
+          && playbackInfo.playbackState == Player.STATE_READY) {
+        invokeAll(
+            listenerSnapshot,
+            listener -> listener.onPlayerStateChanged(playWhenReady, playbackInfo.playbackState));
+      }
+      // END NFLX
     }
   }
 

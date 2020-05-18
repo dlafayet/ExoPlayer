@@ -602,25 +602,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
         renderer.render(rendererPositionUs, rendererPositionElapsedRealtimeUs);
         //SPY-14342: there is a bogus rebuffer toward end of stream when renderer has ended reading EOS
         // however streamFinal is not set
-        // TODO SJS - test this logic
-//        if (playingPeriodHolder.info.isFinal) {
-//          if (renderer.hasReadStreamToEnd() && !renderer.isCurrentStreamFinal()) {
-//            SampleStream sampleStream = null;
-//            MediaPeriodHolder readingPeriodHolder = queue.getReadingPeriod();
-//            for (int j = 0; i < renderers.length; i++) {
-//              if (renderers[j] == renderer) {
-//                sampleStream = readingPeriodHolder.sampleStreams[i];
-//                break;
-//              }
-//            }
-//            // Defer setting the stream as final until the renderer has actually consumed the whole
-//            // stream in case of playlist changes that cause the stream to be no longer final.
-//            if (sampleStream != null && renderer.getStream() == sampleStream
-//                    && renderer.hasReadStreamToEnd()) {
-//              renderer.setCurrentStreamFinal();
-//            }
-//          }
-//        }
+        if (playingPeriodHolder.info.isFinal) {
+          if (renderer.hasReadStreamToEnd() && !renderer.isCurrentStreamFinal()) {
+            SampleStream sampleStream = null;
+            MediaPeriodHolder readingPeriodHolder = queue.getReadingPeriod();
+            for (int j = 0; j < renderers.length; j++) {
+              if (renderers[j] == renderer) {
+                sampleStream = readingPeriodHolder.sampleStreams[j];
+                break;
+              }
+            }
+            // Defer setting the stream as final until the renderer has actually consumed the whole
+            // stream in case of playlist changes that cause the stream to be no longer final.
+            if (sampleStream != null && renderer.getStream() == sampleStream
+                    && renderer.hasReadStreamToEnd()) {
+              renderer.setCurrentStreamFinal();
+            }
+          }
+        }
         //end of SPY-14342
         renderersEnded = renderersEnded && renderer.isEnded();
         // Determine whether the renderer allows playback to continue. Playback can continue if the
