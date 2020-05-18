@@ -844,6 +844,17 @@ import java.util.concurrent.CopyOnWriteArrayList;
       if (seekProcessed) {
         invokeAll(listenerSnapshot, EventListener::onSeekProcessed);
       }
+      // NFLX - we do not process seeks if new position is same as existing. however,
+      // we need to generate an event to inform the UI that the seek is over. this case
+      // can be determined when the event is processing a seek and the playback state is
+      // PLAYING before and PLAYING after (it hasn't changed at all)
+      if (!playbackStateChanged && seekProcessed && playWhenReady
+          && playbackInfo.playbackState == Player.STATE_READY) {
+        invokeAll(
+            listenerSnapshot,
+            listener -> listener.onPlayerStateChanged(playWhenReady, playbackInfo.playbackState));
+      }
+      // END NFLX
     }
   }
 
