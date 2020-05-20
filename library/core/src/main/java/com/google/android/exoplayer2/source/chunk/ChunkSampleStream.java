@@ -125,7 +125,7 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
     this.loadErrorHandlingPolicy = loadErrorHandlingPolicy;
     loader = new Loader("Loader:ChunkSampleStream");
     nextChunkHolder = new ChunkHolder();
-    mediaChunks = Collections.synchronizedList(new ArrayList<>());
+    mediaChunks = Collections.synchronizedList(new ArrayList<>()); // SPY-15940
     readOnlyMediaChunks = Collections.unmodifiableList(mediaChunks);
 
     int embeddedTrackCount = embeddedTrackTypes == null ? 0 : embeddedTrackTypes.length;
