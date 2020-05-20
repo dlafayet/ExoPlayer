@@ -74,7 +74,7 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
   private final LoadErrorHandlingPolicy loadErrorHandlingPolicy;
   private final Loader loader;
   private final ChunkHolder nextChunkHolder;
-  protected final ArrayList<BaseMediaChunk> mediaChunks;
+  protected final List<BaseMediaChunk> mediaChunks;
   private final List<BaseMediaChunk> readOnlyMediaChunks;
   private final SampleQueue primarySampleQueue;
   private final SampleQueue[] embeddedSampleQueues;
@@ -125,7 +125,7 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
     this.loadErrorHandlingPolicy = loadErrorHandlingPolicy;
     loader = new Loader("Loader:ChunkSampleStream");
     nextChunkHolder = new ChunkHolder();
-    mediaChunks = new ArrayList<>();
+    mediaChunks = Collections.synchronizedList(new ArrayList<>());
     readOnlyMediaChunks = Collections.unmodifiableList(mediaChunks);
 
     int embeddedTrackCount = embeddedTrackTypes == null ? 0 : embeddedTrackTypes.length;
