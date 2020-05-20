@@ -759,13 +759,20 @@ public class AnalyticsCollector
       for (int i = 0; i < mediaPeriodInfoQueue.size(); i++) {
         MediaPeriodInfo info = mediaPeriodInfoQueue.get(i);
         int periodIndex = timeline.getIndexOfPeriod(info.mediaPeriodId.periodUid);
-        if (periodIndex != C.INDEX_UNSET
-            && timeline.getPeriod(periodIndex, period).windowIndex == windowIndex) {
-          if (match != null) {
-            // Ambiguous match.
-            return null;
+        try {
+          if (periodIndex != C.INDEX_UNSET
+              && timeline.getPeriod(periodIndex, period).windowIndex == windowIndex) {
+            if (match != null) {
+              // Ambiguous match.
+              return null;
+            }
+            match = info;
           }
-          match = info;
+        } catch(Exception e) {
+          // SPY-31424 - if the Timeline is Timeline.EMPTY. this can throw. we can
+          // have an empty Timeline because the Timeline is set on playback thread
+          // but some AnalyticsCollector callbacks are on app thread (see setVolume())
+          return null;
         }
       }
       return match;
