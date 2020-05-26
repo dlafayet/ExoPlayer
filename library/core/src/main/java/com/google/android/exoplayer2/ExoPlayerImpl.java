@@ -327,6 +327,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
   @Override
   public void seekTo(int windowIndex, long positionMs) {
     Timeline timeline = playbackInfo.timeline;
+    // NFLX - if a playgraph was updated and then a seek was performed immediately,
+    // we may not have had time to expose the new windows from the playgraph. this could
+    // cause us to seek past the end of the current timeline. if that happens, we just
+    // assume that the timeline will be updated by the time the player executes this seek,
+    // so set the seek timeline to empty to signal that it should not be used (to prefer
+    // the timeline that the player has when it executes the seek)
+    if (!timeline.isEmpty() && windowIndex >= timeline.getWindowCount()) {
+      timeline = Timeline.EMPTY;
+    }
+    // END NFLX
     if (windowIndex < 0 || (!timeline.isEmpty() && windowIndex >= timeline.getWindowCount())) {
       throw new IllegalSeekPositionException(timeline, windowIndex, positionMs);
     }
