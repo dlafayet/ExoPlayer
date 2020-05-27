@@ -28,6 +28,7 @@ import com.google.android.exoplayer2.util.ParsableByteArray;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 /** A queue of media sample data. */
@@ -359,7 +360,9 @@ import java.util.Arrays;
    * @param fromNode The node from which to clear.
    */
   private void clearAllocationNodes(AllocationNode fromNode) {
-    if (!fromNode.wasInitialized) {
+    //SPY-31125: make sure fromNode is not null to avoid NPE
+    //fromNode could be null if SampleQueue is discarded to an un-initialized node
+    if (fromNode == null || !fromNode.wasInitialized) {
       return;
     }
     // Bulk release allocations for performance (it's significantly faster when using
@@ -369,13 +372,14 @@ import java.util.Arrays;
         (writeAllocationNode.wasInitialized ? 1 : 0)
             + ((int) (writeAllocationNode.startPosition - fromNode.startPosition)
                 / allocationLength);
-    Allocation[] allocationsToRelease = new Allocation[allocationCount];
+    // Allocation[] allocationsToRelease = new Allocation[allocationCount];
     AllocationNode currentNode = fromNode;
-    for (int i = 0; i < allocationsToRelease.length; i++) {
-      allocationsToRelease[i] = currentNode.allocation;
+    ArrayList<Allocation> allocationsToRelease = new ArrayList(allocationCount);
+    for (int i = 0; i < allocationCount && currentNode != null; i++) {
+      if (currentNode.allocation != null) allocationsToRelease.add(currentNode.allocation);
       currentNode = currentNode.clear();
     }
-    allocator.release(allocationsToRelease);
+    allocator.release(allocationsToRelease.toArray(new Allocation[0]));
   }
 
   /**

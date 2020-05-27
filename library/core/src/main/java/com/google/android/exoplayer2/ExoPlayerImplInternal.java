@@ -382,6 +382,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
       maybeNotifyPlaybackInfoChanged();
     } catch (ExoPlaybackException e) {
       Log.e(TAG, getExoPlaybackExceptionMessage(e), e);
+      if (shouldIgnoreErrorDuringRelease()) return true;
       stopInternal(
           /* forceResetRenderers= */ true,
           /* resetPositionAndState= */ false,
@@ -390,6 +391,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
       maybeNotifyPlaybackInfoChanged();
     } catch (IOException e) {
       Log.e(TAG, "Source error", e);
+      if (shouldIgnoreErrorDuringRelease()) return true;
       stopInternal(
           /* forceResetRenderers= */ false,
           /* resetPositionAndState= */ false,
@@ -398,6 +400,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
       maybeNotifyPlaybackInfoChanged();
     } catch (RuntimeException | OutOfMemoryError e) {
       Log.e(TAG, "Internal runtime error", e);
+      if (shouldIgnoreErrorDuringRelease()) return true;
       ExoPlaybackException error =
           e instanceof OutOfMemoryError
               ? ExoPlaybackException.createForOutOfMemoryError((OutOfMemoryError) e)
@@ -413,6 +416,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
   }
 
   // Private methods.
+
+  private boolean shouldIgnoreErrorDuringRelease() {
+    return pendingRelease.get();
+  }
 
   private String getExoPlaybackExceptionMessage(ExoPlaybackException e) {
     if (e.type != ExoPlaybackException.TYPE_RENDERER) {
@@ -917,6 +924,41 @@ import java.util.concurrent.atomic.AtomicBoolean;
       released = true;
       notifyAll();
     }
+  }
+
+  /**
+   * SPY-18738: flag used to indicate release is ongoing, we are going to force player teardown when deadlock
+   * becomes probable.
+   */
+  private AtomicBoolean pendingRelease = new AtomicBoolean();
+  private static final long EXPECTED_RELEASE_COMPLETE_MS = 2000;
+  public synchronized void releaseSPY18738() {
+    if (released || pendingRelease.get()) {
+      return;
+    }
+    pendingRelease.set(true);
+    handler.sendEmptyMessage(MSG_RELEASE);
+
+    /**
+     * return immediately, will check later on main thread for need of manual teardown
+     */
+    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+      try {
+        if (!released && pendingRelease.get()) {
+          resetInternal(
+              /* resetRenderers= */ true,
+              /* releaseMediaSource= */ true,
+              /* resetPosition= */ true,
+              /* resetState= */ true,
+              /* resetError= */ false);
+          internalPlaybackThread.quit();
+        }
+      } catch (Throwable t) {
+        /**
+         * prefer not to cause any crash at this point
+         */
+      }
+    }, EXPECTED_RELEASE_COMPLETE_MS);
   }
 
   private void resetInternal(
