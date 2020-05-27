@@ -447,7 +447,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
         + ExoPlayerLibraryInfo.VERSION_SLASHY + "] [" + Util.DEVICE_DEBUG_INFO + "] ["
         + ExoPlayerLibraryInfo.registeredModules() + "]");
     mediaSource = null;
-    internalPlayer.release();
+    // NFLX - SPY-18738: use custom release to avoid deadlock on main thread
+    // internalPlayer.release();
+    internalPlayer.releaseSPY18738();
+    // END NFLX
     eventHandler.removeCallbacksAndMessages(null);
     playbackInfo =
         getResetPlaybackInfo(
