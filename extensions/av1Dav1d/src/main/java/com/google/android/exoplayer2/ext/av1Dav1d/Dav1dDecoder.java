@@ -52,7 +52,7 @@ public class Dav1dDecoder
      * @throws Dav1dDecoderException Thrown if an exception occurs when initializing the decoder.
      */
     public Dav1dDecoder(
-        int numInputBuffers, int numOutputBuffers, int initialInputBufferSize, int threads)
+        int numInputBuffers, int numOutputBuffers, int initialInputBufferSize, int threads, int tiles)
         throws Dav1dDecoderException {
         super(
             new VideoDecoderInputBuffer[numInputBuffers],
@@ -61,7 +61,7 @@ public class Dav1dDecoder
             throw new Dav1dDecoderException("Failed to load decoder native library.");
         }
 
-        dav1dDecoderContext = dav1dInit(threads);
+        dav1dDecoderContext = dav1dInit(threads, tiles);
         if (dav1dDecoderContext == DAV1D_ERROR) {
             throw new Dav1dDecoderException(
                 "Failed to initialize decoder. ");
@@ -161,7 +161,7 @@ public class Dav1dDecoder
      * @param threads Number of threads to be used by a dav1d decoder.
      * @return The address of the decoder context or {@link #DAV1D_ERROR} if there was an error.
      */
-    private native long dav1dInit(int threads);
+    private native long dav1dInit(int threads, int tiles);
 
     /**
      * Deallocates the decoder context.

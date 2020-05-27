@@ -181,7 +181,7 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
     int initialInputBufferSize =
         format.maxInputSize != Format.NO_VALUE ? format.maxInputSize : DEFAULT_INPUT_BUFFER_SIZE;
     Dav1dDecoder decoder =
-        new Dav1dDecoder(numInputBuffers, numOutputBuffers, initialInputBufferSize, threads);
+        new Dav1dDecoder(numInputBuffers, numOutputBuffers, initialInputBufferSize, threads, threads);
     this.decoder = decoder;
     TraceUtil.endSection();
     return decoder;
