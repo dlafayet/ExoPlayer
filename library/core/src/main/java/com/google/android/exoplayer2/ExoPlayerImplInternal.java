@@ -1840,32 +1840,47 @@ import java.util.concurrent.atomic.AtomicBoolean;
   }
 
   private void maybeContinueLoading() throws ExoPlaybackException {
-      if (pendingInitialSeekPosition != null) {
-          //SPY-14741: workaround  corrupted first sample by avoiding seek while first chunk is loading
-          long seekPositionUs = pendingInitialSeekPosition.windowPositionUs;
-          if (seekPositionUs > 0) {
-              MediaPeriodHolder loadingPeriodHolder = queue.getLoadingPeriod();
-              if (loadingPeriodHolder.prepared) {
-                  long adjustedSeekPositionUs = loadingPeriodHolder.mediaPeriod.getAdjustedSeekPositionUs(seekPositionUs, seekParameters);
-                  if (adjustedSeekPositionUs != C.TIME_UNSET) {
-                      Log.d("NFLX", "resetRendererPosition to initialSeekPosition " + seekPositionUs + " => " + adjustedSeekPositionUs);
-                      if (seekPositionUs != adjustedSeekPositionUs) {
-                          loadingPeriodHolder.mediaPeriod.seekToUs(adjustedSeekPositionUs);
-                          resetRendererPosition(adjustedSeekPositionUs);
-                      }
-                      pendingInitialSeekPosition = null;
-                  }
-              }
-          } else {
-              // we know seekPositionUs=0 does not need adjustment
-              pendingInitialSeekPosition = null;
-          }
-      }
+    // SPY-14741: workaround  corrupted first sample by avoiding seek while first chunk is loading
+    maybeSeekToInitialPosition();
     shouldContinueLoading = shouldContinueLoading();
     if (shouldContinueLoading) {
       queue.getLoadingPeriod().continueLoading(rendererPositionUs);
     }
     updateIsLoading();
+  }
+
+  private void maybeSeekToInitialPosition() throws ExoPlaybackException {
+    // this code block allows us to "defer" initial seeks until the player is prepared and the
+    // headers are downloaded
+    if (pendingInitialSeekPosition != null) {
+      // resolve the seek position to a player position (this maps a playgraph timeline that
+      // targets a "clipped" segment to a "real" player seek position)
+      Pair<Object, Long> resolvedSeekPosition =
+          resolveSeekPosition(pendingInitialSeekPosition, /* trySubsequentPeriods= */ false);
+      if(resolvedSeekPosition != null) {
+        Long seekPositionUs = resolvedSeekPosition.second;
+        if (seekPositionUs != null && seekPositionUs > 0) {
+          MediaPeriodHolder loadingPeriodHolder = queue.getLoadingPeriod();
+          if (loadingPeriodHolder.prepared) {
+            long adjustedSeekPositionUs = loadingPeriodHolder.mediaPeriod
+                .getAdjustedSeekPositionUs(seekPositionUs, seekParameters);
+            if (adjustedSeekPositionUs != C.TIME_UNSET) {
+              Log.d("NFLX",
+                  "resetRendererPosition to initialSeekPosition " + seekPositionUs + " => "
+                      + adjustedSeekPositionUs);
+              if (seekPositionUs != adjustedSeekPositionUs) {
+                loadingPeriodHolder.mediaPeriod.seekToUs(adjustedSeekPositionUs);
+                resetRendererPosition(adjustedSeekPositionUs);
+              }
+              pendingInitialSeekPosition = null;
+            }
+          }
+        } else {
+          // we know seekPositionUs=0 does not need adjustment
+          pendingInitialSeekPosition = null;
+        }
+      }
+    }
   }
 
   private boolean shouldContinueLoading() {
