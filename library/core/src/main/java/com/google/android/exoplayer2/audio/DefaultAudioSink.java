@@ -986,6 +986,10 @@ public class DefaultAudioSink implements AudioSink {
           try {
             toRelease.flush();
             toRelease.release();
+          } catch (Exception e) {
+            // NFLX - any errors in a thread can kill entire app - since AudioSink
+            // is already closed, ignore any errors in flushing
+            Log.e(TAG, "unable to flush", e);
           } finally {
             releasingConditionVariable.open();
           }
