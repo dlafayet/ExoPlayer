@@ -114,7 +114,7 @@ if (project.ext.has("artifactoryEnabled")
         contextUrl = 'http://artifacts.netflix.com/'
         publish {
             repository {
-                repoKey = 'libs-releases-local'
+                repoKey = 'libs-releases-local-pom'
                 username = ARTIFACTORY_USER_NAME
                 password = ARTIFACTORY_PASSWORD
                 // This is an optional section for configuring Ivy publication (when publishIvy = true).
