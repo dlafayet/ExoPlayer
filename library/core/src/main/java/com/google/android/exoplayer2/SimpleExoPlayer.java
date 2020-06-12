@@ -75,6 +75,15 @@ public class SimpleExoPlayer extends BasePlayer
         Player.TextComponent,
         Player.MetadataComponent {
 
+  /**
+   * if true, Player.release() will not block until the player is fully released
+   */
+  public static boolean _experimentalAsyncRelease = false;
+  /**
+   * If true, we don't check results of Player.release()
+   */
+  public static boolean _experimentalAsyncReleaseAndForget = false;
+
   /** @deprecated Use {@link com.google.android.exoplayer2.video.VideoListener}. */
   @Deprecated
   public interface VideoListener extends com.google.android.exoplayer2.video.VideoListener {}

@@ -938,6 +938,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
     }
     pendingRelease.set(true);
     handler.sendEmptyMessage(MSG_RELEASE);
+    if (SimpleExoPlayer._experimentalAsyncReleaseAndForget) {
+      return;
+    }
 
     /**
      * return immediately, will check later on main thread for need of manual teardown
