@@ -157,7 +157,9 @@ public final class MimeTypes {
     }
     // TODO: Consider adding additional audio MIME types here.
     switch (mimeType) {
-      case AUDIO_AAC:
+      //SPY-31749: xHE-AAC audio causes video frames to be dropped during seek
+      //Disabling it for AAC
+      //case AUDIO_AAC:
       case AUDIO_MPEG:
       case AUDIO_MPEG_L1:
       case AUDIO_MPEG_L2:
