@@ -46,7 +46,7 @@ import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.RequiresNonNull;
 
 /** A {@link DrmSession} that supports playbacks using {@link ExoMediaDrm}. */
-@TargetApi(18)
+@androidx.annotation.RequiresApi(api = android.os.Build.VERSION_CODES.JELLY_BEAN_MR2)
 /* package */ class DefaultDrmSession<T extends ExoMediaCrypto> implements DrmSession<T> {
 
   /** Thrown when an unexpected exception or error is thrown during provisioning or key requests. */
