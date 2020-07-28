@@ -242,8 +242,12 @@ public abstract class SimpleDecoderVideoRenderer extends BaseRenderer {
       drmResourcesAcquired = true;
       drmSessionManager.prepare();
     }
-    decoderCounters = new DecoderCounters();
+    decoderCounters = createDecoderCounters();
     eventDispatcher.enabled(decoderCounters);
+  }
+
+  protected DecoderCounters createDecoderCounters() {
+    return new DecoderCounters();
   }
 
   @Override
