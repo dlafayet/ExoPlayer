@@ -293,6 +293,7 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
   protected void dropOutputBuffer(VideoDecoderOutputBuffer outputBuffer) {
     // currently we send out an
     Log.d(TAG, "Drop current buffer");
+    updateDroppedBufferCounters(1);
     droppedFrameCountInMeasureWindow++;
     if (droppedFrameCountInMeasureWindow > 15) {
       droppedFramesStats[4]++;
