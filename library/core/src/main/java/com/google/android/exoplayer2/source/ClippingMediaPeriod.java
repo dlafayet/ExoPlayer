@@ -15,7 +15,8 @@
  */
 package com.google.android.exoplayer2.source;
 
-import androidx.annotation.Nullable;
+import android.util.Log;
+
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.FormatHolder;
@@ -25,8 +26,12 @@ import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.Util;
-import java.io.IOException;
+
 import org.checkerframework.checker.nullness.compatqual.NullableType;
+
+import java.io.IOException;
+
+import androidx.annotation.Nullable;
 
 /**
  * Wraps a {@link MediaPeriod} and clips its {@link SampleStream}s to provide a subsequence of their
@@ -282,6 +287,7 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
 
     private boolean sentEos;
 
+    private Format format;
     public ClippingSampleStream(SampleStream childStream) {
       this.childStream = childStream;
     }
@@ -312,7 +318,7 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
       }
       int result = childStream.readData(formatHolder, buffer, requireFormat);
       if (result == C.RESULT_FORMAT_READ) {
-        Format format = Assertions.checkNotNull(formatHolder.format);
+        format = Assertions.checkNotNull(formatHolder.format);
         if (format.encoderDelay != 0 || format.encoderPadding != 0) {
           // Clear gapless playback metadata if the start/end points don't match the media.
           int encoderDelay = startUs != 0 ? 0 : format.encoderDelay;
@@ -331,6 +337,14 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
         sentEos = true;
         return C.RESULT_BUFFER_READ;
       }
+      /**
+       * Netflix - splice audio in segment start and segment end
+       * Audio mime supports are AAC and EAC3
+       */
+      if (format != null && (MimeTypes.AUDIO_AAC.equals(format.sampleMimeType)
+          || MimeTypes.AUDIO_E_AC3.equals(format.sampleMimeType))) {
+        spliceAudioIfNeeded(buffer);
+      }
       return result;
     }
 
@@ -340,6 +354,29 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
         return C.RESULT_NOTHING_READ;
       }
       return childStream.skipData(positionUs);
+    }
+
+    private void spliceAudioIfNeeded(DecoderInputBuffer buffer) {
+      long frameDurationUs = MimeTypes.AUDIO_AAC.equals(format.sampleMimeType) ? 42666 : 32000;
+      long trimAudioUs = 0;
+      if(buffer.timeUs < startUs && buffer.timeUs + frameDurationUs > startUs) {
+        /**
+         * partial frame at beginning of a segment
+         * trim from start of audio frame, positive of the delta from startUs to frame start, in microsecond
+         */
+        trimAudioUs = startUs - buffer.timeUs;
+      } else if(buffer.timeUs < endUs && buffer.timeUs + frameDurationUs > endUs){
+        /**
+         * partial frame at end of a segment
+         * trim from end of audio frame, negative of the delta from frame end to endUs, in microsecond
+         */
+        trimAudioUs = endUs - buffer.timeUs - frameDurationUs;
+      }
+
+      if(trimAudioUs != 0) {
+        buffer.clearFlag(C.BUFFER_FLAG_DECODE_ONLY); // BUFFER_FLAG_DECODE_ONLY is set at SampleQueue
+      }
+      buffer.trimAudioUs = trimAudioUs;
     }
   }
 }

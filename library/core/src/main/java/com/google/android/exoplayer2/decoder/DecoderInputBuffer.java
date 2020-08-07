@@ -220,4 +220,13 @@ public class DecoderInputBuffer extends Buffer {
     // TODO  SJS return getFlag(C.BUFFER_FLAG_DISPOSABLE_FRAME);
     return false;
   }
+
+  /**
+   * migrate to  exoplayer 2.11.x
+   * https://stash.corp.netflix.com/projects/AND/repos/samurai/commits/cc216dc3ad5441413d1e1abfb6ff0e71f8c32712
+   * SPY-17006 : splice audio
+   * positive in microsecond,  trim from start of audio frame
+   * negative in microsecond,  trim from end of audio frame
+   */
+  public long trimAudioUs;
 }
