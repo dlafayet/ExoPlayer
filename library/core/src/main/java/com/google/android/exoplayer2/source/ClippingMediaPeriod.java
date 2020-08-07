@@ -15,8 +15,6 @@
  */
 package com.google.android.exoplayer2.source;
 
-import android.util.Log;
-
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.FormatHolder;
@@ -328,7 +326,7 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
         return C.RESULT_FORMAT_READ;
       }
       if (endUs != C.TIME_END_OF_SOURCE
-          && ((result == C.RESULT_BUFFER_READ && buffer.timeUs >= endUs)
+          && ((result == C.RESULT_BUFFER_READ && shouldExcludeBufferFromEnd(buffer))
               || (result == C.RESULT_NOTHING_READ
                   && getBufferedPositionUs() == C.TIME_END_OF_SOURCE
                   && !buffer.waitingForKeys))) {
@@ -336,6 +334,10 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
         buffer.setFlags(C.BUFFER_FLAG_END_OF_STREAM);
         sentEos = true;
         return C.RESULT_BUFFER_READ;
+      }
+
+      if(shouldIncludeBufferAsPeriodStart(buffer)) {
+        buffer.clearFlag(C.BUFFER_FLAG_DECODE_ONLY);
       }
       /**
        * Netflix - splice audio in segment start and segment end
@@ -357,26 +359,50 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
     }
 
     private void spliceAudioIfNeeded(DecoderInputBuffer buffer) {
+      /**
+       * TODO: update frameDurationUs if xheaac adopt larger max audio frame length
+       */
       long frameDurationUs = MimeTypes.AUDIO_AAC.equals(format.sampleMimeType) ? 42666 : 32000;
-      long trimAudioUs = 0;
+      long trimKeepAudioUs = 0;
+      /**
+       * due rounding, we could over estimate trimming on both end by as much as 1 ms
+       */
       if(buffer.timeUs < startUs && buffer.timeUs + frameDurationUs > startUs) {
         /**
          * partial frame at beginning of a segment
-         * trim from start of audio frame, positive of the delta from startUs to frame start, in microsecond
+         * trim from start of audio frame, positive of the delta from startUs to frame start,
+         * microsecond to trim
          */
-        trimAudioUs = startUs - buffer.timeUs;
+        trimKeepAudioUs = startUs - buffer.timeUs;
       } else if(buffer.timeUs < endUs && buffer.timeUs + frameDurationUs > endUs){
         /**
          * partial frame at end of a segment
-         * trim from end of audio frame, negative of the delta from frame end to endUs, in microsecond
+         * keep from begging of audio frame, negative of the delta from frame beginning to endUs
+         * microsecond to keep
          */
-        trimAudioUs = endUs - buffer.timeUs - frameDurationUs;
+        trimKeepAudioUs = buffer.timeUs - endUs;
       }
 
-      if(trimAudioUs != 0) {
+      if(trimKeepAudioUs != 0) {
         buffer.clearFlag(C.BUFFER_FLAG_DECODE_ONLY); // BUFFER_FLAG_DECODE_ONLY is set at SampleQueue
       }
-      buffer.trimAudioUs = trimAudioUs;
+      buffer.trimKeepAudioUs = trimKeepAudioUs;
     }
+  }
+
+  /**
+   * end time of a segment is round down to ms,
+   * buffer need to be rendered if buffer.timeUs >= endUs + 1000
+   */
+  private boolean shouldExcludeBufferFromEnd(DecoderInputBuffer buffer) {
+    return (endUs != C.TIME_END_OF_SOURCE && buffer.timeUs >= endUs + 1000);
+  }
+
+  /**
+   * beginning time of segment is round up to 1 ms,
+   * buffer need to be rendered if startUs <= buffer.timeUs + 1000
+   */
+  private boolean shouldIncludeBufferAsPeriodStart(DecoderInputBuffer buffer) {
+    return  startUs <= buffer.timeUs + 1000;
   }
 }
