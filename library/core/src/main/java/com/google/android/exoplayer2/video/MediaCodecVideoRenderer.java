@@ -930,6 +930,12 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
       } else {
         dropOutputBuffer(codec, bufferIndex, presentationTimeUs);
       }
+        //request frame to be skipped when decoder is too far behind
+        if(playbackSpeed > 1f && earlyUs < -500000 && !shouldSkipInput) {
+            shouldSkipInput = true;
+            decoderCounters.droppedToKeyframeCount++;
+            //will let decoder flush pipelined data naturally, and skip to next input key frame
+        }
       return true;
     }
 

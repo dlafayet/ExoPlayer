@@ -382,10 +382,22 @@ import java.util.List;
   @SuppressWarnings("ConstantCaseForConstants")
   public static final int TYPE_twos = 0x74776f73;
 
+  public static final int TYPE_sdtp = getIntegerCodeForString("sdtp");
+
   public final int type;
 
   public Atom(int type) {
     this.type = type;
+  }
+
+  public static int getIntegerCodeForString(String string) {
+    int length = string.length();
+    int result = 0;
+    for (int i = 0; i < length; i++) {
+      result <<= 8;
+      result |= string.charAt(i);
+    }
+    return result;
   }
 
   @Override

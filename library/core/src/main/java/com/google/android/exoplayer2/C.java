@@ -502,7 +502,8 @@ public final class C {
         BUFFER_FLAG_HAS_SUPPLEMENTAL_DATA,
         BUFFER_FLAG_LAST_SAMPLE,
         BUFFER_FLAG_ENCRYPTED,
-        BUFFER_FLAG_DECODE_ONLY
+        BUFFER_FLAG_DECODE_ONLY,
+          BUFFER_FLAG_DISPOSABLE_FRAME
       })
   public @interface BufferFlags {}
   /**
@@ -521,6 +522,8 @@ public final class C {
   public static final int BUFFER_FLAG_ENCRYPTED = 1 << 30; // 0x40000000
   /** Indicates that a buffer should be decoded but not rendered. */
   public static final int BUFFER_FLAG_DECODE_ONLY = 1 << 31; // 0x80000000
+
+  public static final int BUFFER_FLAG_DISPOSABLE_FRAME = 1 << 27;
 
   // LINT.IfChange
   /**

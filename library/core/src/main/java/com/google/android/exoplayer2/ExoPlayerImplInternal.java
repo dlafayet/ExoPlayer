@@ -866,6 +866,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
   }
 
   private void setPlaybackParametersInternal(PlaybackParameters playbackParameters) {
+    for (Renderer renderer : renderers) {
+      renderer.setPlaybackSpeed(playbackParameters.speed);
+    }
+
     mediaClock.setPlaybackParameters(playbackParameters);
     sendPlaybackParametersChangedInternal(
         mediaClock.getPlaybackParameters(), /* acknowledgeCommand= */ true);

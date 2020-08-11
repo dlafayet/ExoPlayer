@@ -217,7 +217,6 @@ public class DecoderInputBuffer extends Buffer {
    * Currently only applicable for video frames signaled via sample dependency description
    */
   public final boolean isDisposable() {
-    // TODO  SJS return getFlag(C.BUFFER_FLAG_DISPOSABLE_FRAME);
-    return false;
+    return getFlag(C.BUFFER_FLAG_DISPOSABLE_FRAME);
   }
 }

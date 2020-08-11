@@ -383,6 +383,8 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
   // SPY-18128 - tracks when a Format is read but we are waiting for MediaCrypto to be ready before creating Codec
   protected boolean waitingForMediaCrypto;
 
+  protected boolean shouldSkipInput;
+
   /**
    * @param trackType The track type that the renderer handles. One of the {@code C.TRACK_TYPE_*}
    *     constants defined in {@link C}.
@@ -1191,6 +1193,13 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
       largestQueuedPresentationTimeUs =
           Math.max(largestQueuedPresentationTimeUs, presentationTimeUs);
 
+      //Netflix: skip disposable (video) frames until next key frame
+      if(shouldSkipInput && !buffer.isKeyFrame() && !buffer.isFlagsOnly() && buffer.isDisposable()) {
+        buffer.clear();
+        return true;
+      } else if(buffer.isKeyFrame()) {
+        shouldSkipInput = false;
+      }
       buffer.flip();
       if (buffer.hasSupplementalData()) {
         handleInputBufferSupplementalData(buffer);

@@ -303,4 +303,10 @@ public interface Renderer extends PlayerMessage.Target {
    * #STATE_DISABLED}.
    */
   void reset();
+
+  /**
+   * SPY-19362: video renderer has specific logic handling frame drop at higher playback speed
+   * @param speed
+   */
+  void setPlaybackSpeed(float speed);
 }
