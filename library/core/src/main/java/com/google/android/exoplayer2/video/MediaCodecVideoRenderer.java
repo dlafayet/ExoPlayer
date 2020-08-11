@@ -930,13 +930,10 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
       } else {
         dropOutputBuffer(codec, bufferIndex, presentationTimeUs);
       }
-        //request frame to be skipped when decoder is too far behind
-        if(playbackSpeed > 1f && earlyUs < -500000 && !shouldSkipInput) {
-            shouldSkipInput = true;
-            decoderCounters.droppedToKeyframeCount++;
-            //will let decoder flush pipelined data naturally, and skip to next input key frame
-        }
-      return true;
+
+      if (maybeDropDisposableFrames(earlyUs)) {
+        return true;
+      }
     }
 
     if (Util.SDK_INT >= 21) {
@@ -969,6 +966,15 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     }
 
     // We're either not playing, or it's not time to render the frame yet.
+    return false;
+  }
+
+  private boolean maybeDropDisposableFrames(long earlyUs) {
+    //request frame to be skipped when decoder is too far behind
+    if(playbackSpeed > 1f && isBufferLate(earlyUs)) {
+      setShouldSkipDisposableInput(true);
+      return true;
+    }
     return false;
   }
 
@@ -1086,6 +1092,10 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   protected boolean shouldDropBuffersToKeyframe(
       long earlyUs, long elapsedRealtimeUs, boolean isLastBuffer) {
     return isBufferVeryLate(earlyUs) && !isLastBuffer;
+  }
+
+  protected boolean shouldDropDisposableInput(long earlyUs) {
+    return isBufferLate(earlyUs);
   }
 
   /**
