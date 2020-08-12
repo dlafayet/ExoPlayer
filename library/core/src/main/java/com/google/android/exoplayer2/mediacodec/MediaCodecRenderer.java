@@ -1195,7 +1195,6 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
 
       //Netflix: skip disposable (video) frames until next key frame
       if(shouldSkipDisposableInput() && !buffer.isKeyFrame() && !buffer.isFlagsOnly() && buffer.isDisposable()) {
-        Log.d("VL:", "skipped disposable");
         buffer.clear();
         return true;
       } else if(buffer.isKeyFrame()) {
