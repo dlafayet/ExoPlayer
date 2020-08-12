@@ -99,6 +99,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   /** Magic frame render timestamp that indicates the EOS in tunneling mode. */
   private static final long TUNNELING_EOS_PRESENTATION_TIME_US = Long.MAX_VALUE;
 
+  /** delay in ms that a frame should be disposed */
+  private static final long DISPOSABLE_FRAME_THRESHOLD = -100000;
+
   /** A {@link DecoderException} with additional surface information. */
   public static final class VideoDecoderException extends DecoderException {
 
@@ -931,9 +934,8 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
         dropOutputBuffer(codec, bufferIndex, presentationTimeUs);
       }
 
-      if (maybeDropDisposableFrames(earlyUs)) {
-        return true;
-      }
+      maybeDropDisposableFrames(earlyUs);
+      return true;
     }
 
     if (Util.SDK_INT >= 21) {
@@ -971,7 +973,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
 
   private boolean maybeDropDisposableFrames(long earlyUs) {
     //request frame to be skipped when decoder is too far behind
-    if(playbackSpeed > 1f && isBufferLate(earlyUs)) {
+    if(playbackSpeed > 1f && isBufferDisposable(earlyUs)) {
       setShouldSkipDisposableInput(true);
       return true;
     }
@@ -1109,7 +1111,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
    */
   protected boolean shouldForceRenderOutputBuffer(long earlyUs, long elapsedSinceLastRenderUs) {
     // Force render late buffers every 100ms to avoid frozen video effect.
-    return isBufferLate(earlyUs) && elapsedSinceLastRenderUs > 100000;
+    return isBufferLate(earlyUs) && elapsedSinceLastRenderUs > 200000;
   }
 
   /**
@@ -1320,6 +1322,9 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     return earlyUs < -30000;
   }
 
+  private static boolean isBufferDisposable(long earlyUs) {
+    return earlyUs < DISPOSABLE_FRAME_THRESHOLD;
+  }
   private static boolean isBufferVeryLate(long earlyUs) {
     // Class a buffer as very late if it should have been presented more than 500 ms ago.
     return earlyUs < -500000;
