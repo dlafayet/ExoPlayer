@@ -46,6 +46,8 @@ public abstract class BaseRenderer implements Renderer, RendererCapabilities {
   private boolean streamIsFinal;
   private boolean throwRendererExceptionIsExecuting;
 
+  protected float playbackSpeed = PlaybackParameters.DEFAULT.speed;
+
   /**
    * @param trackType The track type that the renderer handles. One of the {@link C}
    * {@code TRACK_TYPE_*} constants.
@@ -433,4 +435,8 @@ public abstract class BaseRenderer implements Renderer, RendererCapabilities {
     return drmSessionManager.canAcquireSession(drmInitData);
   }
 
+  @Override
+  public void setPlaybackSpeed(float speed) {
+    playbackSpeed = speed;
+  }
 }

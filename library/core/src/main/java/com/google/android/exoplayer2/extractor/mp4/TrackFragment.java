@@ -108,6 +108,8 @@ import java.io.IOException;
   //it is Netflix specific "edts/elst" to map media time to track time with assumption of single "elst" entry
   public long mediaTimeOffset = 0;
 
+  public boolean[] sampleIsDisposable;
+
   /**
    * Resets the fragment.
    * <p>
@@ -147,6 +149,7 @@ import java.io.IOException;
       sampleDecodingTimeTable = new long[tableSize];
       sampleIsSyncFrameTable = new boolean[tableSize];
       sampleHasSubsampleEncryptionTable = new boolean[tableSize];
+      sampleIsDisposable = new boolean[tableSize];
     }
   }
 

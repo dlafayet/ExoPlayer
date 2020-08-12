@@ -728,7 +728,16 @@ public class FragmentedMp4Extractor implements Extractor {
       decodeTime = parseTfdt(traf.getLeafAtomOfType(Atom.TYPE_tfdt).data);
     }
 
-    parseTruns(traf, trackBundle, decodeTime, flags);
+      /*
+       * parse sdtp in traf for Legacy netflix packaging
+       * need to do it BEFORE trun parsing
+       */
+      LeafAtom sdtp = traf.getLeafAtomOfType(Atom.TYPE_sdtp);
+      if(sdtp != null) {
+          parseSdtp(sdtp.data, fragment);
+      }
+
+      parseTruns(traf, trackBundle, decodeTime, flags);
 
     TrackEncryptionBox encryptionBox = trackBundle.track
         .getSampleDescriptionEncryptionBox(fragment.header.sampleDescriptionIndex);
@@ -764,8 +773,30 @@ public class FragmentedMp4Extractor implements Extractor {
     }
   }
 
+  private static void parseSdtp(ParsableByteArray sdtp, TrackFragment out) {
+    sdtp.setPosition(Atom.FULL_HEADER_SIZE);
+    int byteLeft = sdtp.bytesLeft();
+    if (byteLeft > 0) { // instead of using sample count from stsz
+      out.sampleIsDisposable = new boolean[byteLeft];
+    }
+    int i = 0;
+    while (i < byteLeft) {
+      int b = sdtp.readUnsignedByte();
+      //int sample_has_redundancy = b & 3;
+      b >>= 2;
+      int sample_is_depended_on = b & 3;
+      //b >>= 2;
+      //int sample_depends_on = b & 3;
+      //b >>= 2;
+      //int is_leading = b & 3;
+      out.sampleIsDisposable[i] = (sample_is_depended_on == 2);
+      i++;
+    }
+  }
+
   private static void parseTruns(ContainerAtom traf, TrackBundle trackBundle, long decodeTime,
       @Flags int flags) {
+
     int trunCount = 0;
     int totalSampleCount = 0;
     List<LeafAtom> leafChildren = traf.leafChildren;
@@ -977,6 +1008,7 @@ public class FragmentedMp4Extractor implements Extractor {
     long[] sampleDecodingTimeTable = fragment.sampleDecodingTimeTable;
     boolean[] sampleIsSyncFrameTable = fragment.sampleIsSyncFrameTable;
 
+    boolean[] sampleIsDisposable = fragment.sampleIsDisposable;
     boolean workaroundEveryVideoFrameIsSyncFrame = track.type == C.TRACK_TYPE_VIDEO
         && (flags & FLAG_WORKAROUND_EVERY_VIDEO_FRAME_IS_SYNC_FRAME) != 0;
 
@@ -1005,6 +1037,7 @@ public class FragmentedMp4Extractor implements Extractor {
       sampleDecodingTimeTable[i] =
           Util.scaleLargeTimestamp(cumulativeTime, C.MILLIS_PER_SECOND, timescale) - edtsOffset;
       sampleSizeTable[i] = sampleSize;
+      sampleIsDisposable[i] = sampleFlagsPresent && ((sampleFlags >> 22) & 3) == 2;
       sampleIsSyncFrameTable[i] = ((sampleFlags >> 16) & 0x1) == 0
           && (!workaroundEveryVideoFrameIsSyncFrame || i == 0);
       cumulativeTime += sampleDuration;
@@ -1352,6 +1385,9 @@ public class FragmentedMp4Extractor implements Extractor {
 
     @C.BufferFlags int sampleFlags = fragment.sampleIsSyncFrameTable[sampleIndex]
         ? C.BUFFER_FLAG_KEY_FRAME : 0;
+    if (fragment.sampleIsDisposable[sampleIndex]) {
+      sampleFlags |= C.BUFFER_FLAG_DISPOSABLE_FRAME;
+    }
 
     // Encryption data.
     TrackOutput.CryptoData cryptoData = null;
