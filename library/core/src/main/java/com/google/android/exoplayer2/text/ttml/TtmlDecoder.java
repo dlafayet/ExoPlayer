@@ -16,12 +16,15 @@
 package com.google.android.exoplayer2.text.ttml;
 
 import android.text.Layout;
+import androidx.annotation.Nullable;
 
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.text.SimpleSubtitleDecoder;
 import com.google.android.exoplayer2.text.Subtitle;
 import com.google.android.exoplayer2.text.SubtitleDecoderException;
+import com.google.android.exoplayer2.text.span.RubySpan;
+import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.ColorParser;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.Util;
@@ -38,6 +41,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.checkerframework.checker.nullness.qual.PolyNull;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
+import org.xmlpull.v1.XmlPullParserFactory;
 
 /**
  * A {@link SimpleSubtitleDecoder} for TTML supporting the DFXP presentation profile. Features
@@ -113,18 +120,18 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
       Map<String, TtmlStyle> globalStyles = new HashMap<>();
       Map<String, TtmlRegion> regionMap = new HashMap<>();
       Map<String, String> imageMap = new HashMap<>();
-      regionMap.put(TtmlNode.ANONYMOUS_REGION_ID, new TtmlRegion(null));
+      regionMap.put(TtmlNode.ANONYMOUS_REGION_ID, new TtmlRegion(TtmlNode.ANONYMOUS_REGION_ID));
       ByteArrayInputStream inputStream = new ByteArrayInputStream(bytes, 0, length);
       xmlParser.setInput(inputStream, null);
-      TtmlSubtitle ttmlSubtitle = null;
+      @Nullable TtmlSubtitle ttmlSubtitle = null;
       ArrayDeque<TtmlNode> nodeStack = new ArrayDeque<>();
       int unsupportedNodeDepth = 0;
       int eventType = xmlParser.getEventType();
       FrameAndTickRate frameAndTickRate = DEFAULT_FRAME_AND_TICK_RATE;
       CellResolution cellResolution = DEFAULT_CELL_RESOLUTION;
-      TtsExtent ttsExtent = null;
+      @Nullable TtsExtent ttsExtent = null;
       while (eventType != XmlPullParser.END_DOCUMENT) {
-        TtmlNode parent = nodeStack.peek();
+        @Nullable TtmlNode parent = nodeStack.peek();
         if (unsupportedNodeDepth == 0) {
           String name = xmlParser.getName();
           if (eventType == XmlPullParser.START_TAG) {
@@ -152,10 +159,12 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
               }
             }
           } else if (eventType == XmlPullParser.TEXT) {
-            parent.addChild(TtmlNode.buildTextNode(xmlParser.getText()));
+            Assertions.checkNotNull(parent).addChild(TtmlNode.buildTextNode(xmlParser.getText()));
           } else if (eventType == XmlPullParser.END_TAG) {
             if (xmlParser.getName().equals(TtmlNode.TAG_TT)) {
-              ttmlSubtitle = new TtmlSubtitle(nodeStack.peek(), globalStyles, regionMap, imageMap);
+              ttmlSubtitle =
+                  new TtmlSubtitle(
+                      Assertions.checkNotNull(nodeStack.peek()), globalStyles, regionMap, imageMap);
             }
             nodeStack.pop();
           }
@@ -169,7 +178,11 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
         xmlParser.next();
         eventType = xmlParser.getEventType();
       }
-      return ttmlSubtitle;
+      if (ttmlSubtitle != null) {
+        return ttmlSubtitle;
+      } else {
+        throw new SubtitleDecoderException("No TTML subtitles found");
+      }
     } catch (XmlPullParserException xppe) {
       throw new SubtitleDecoderException("Unable to decode source", xppe);
     } catch (IOException e) {
@@ -216,8 +229,8 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     return new FrameAndTickRate(frameRate * frameRateMultiplier, subFrameRate, tickRate);
   }
 
-  private CellResolution parseCellResolution(XmlPullParser xmlParser, CellResolution defaultValue)
-      throws SubtitleDecoderException {
+  private static CellResolution parseCellResolution(
+      XmlPullParser xmlParser, CellResolution defaultValue) throws SubtitleDecoderException {
     String cellResolution = xmlParser.getAttributeValue(TTP, "cellResolution");
     if (cellResolution == null) {
       return defaultValue;
@@ -229,8 +242,8 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
       return defaultValue;
     }
     try {
-      int columns = Integer.parseInt(cellResolutionMatcher.group(1));
-      int rows = Integer.parseInt(cellResolutionMatcher.group(2));
+      int columns = Integer.parseInt(Assertions.checkNotNull(cellResolutionMatcher.group(1)));
+      int rows = Integer.parseInt(Assertions.checkNotNull(cellResolutionMatcher.group(2)));
       if (columns == 0 || rows == 0) {
         throw new SubtitleDecoderException("Invalid cell resolution " + columns + " " + rows);
       }
@@ -241,7 +254,9 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     }
   }
 
-  private TtsExtent parseTtsExtent(XmlPullParser xmlParser) {
+  @Nullable
+  private static TtsExtent parseTtsExtent(XmlPullParser xmlParser) {
+    @Nullable
     String ttsExtent = XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_EXTENT);
     if (ttsExtent == null) {
       return null;
@@ -253,8 +268,8 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
       return null;
     }
     try {
-      int width = Integer.parseInt(extentMatcher.group(1));
-      int height = Integer.parseInt(extentMatcher.group(2));
+      int width = Integer.parseInt(Assertions.checkNotNull(extentMatcher.group(1)));
+      int height = Integer.parseInt(Assertions.checkNotNull(extentMatcher.group(2)));
       return new TtsExtent(width, height);
     } catch (NumberFormatException e) {
       Log.w(TAG, "Ignoring malformed tts extent: " + ttsExtent);
@@ -262,28 +277,30 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     }
   }
 
-  private Map<String, TtmlStyle> parseHeader(
+  private static Map<String, TtmlStyle> parseHeader(
       XmlPullParser xmlParser,
       Map<String, TtmlStyle> globalStyles,
       CellResolution cellResolution,
-      TtsExtent ttsExtent,
+      @Nullable TtsExtent ttsExtent,
       Map<String, TtmlRegion> globalRegions,
       Map<String, String> imageMap)
       throws IOException, XmlPullParserException {
     do {
       xmlParser.next();
       if (XmlPullParserUtil.isStartTag(xmlParser, TtmlNode.TAG_STYLE)) {
-        String parentStyleId = XmlPullParserUtil.getAttributeValue(xmlParser, ATTR_STYLE);
+        @Nullable String parentStyleId = XmlPullParserUtil.getAttributeValue(xmlParser, ATTR_STYLE);
         TtmlStyle style = parseStyleAttributes(xmlParser, new TtmlStyle());
         if (parentStyleId != null) {
           for (String id : parseStyleIds(parentStyleId)) {
             style.chain(globalStyles.get(id));
           }
         }
-        if (style.getId() != null) {
-          globalStyles.put(style.getId(), style);
+        String styleId = style.getId();
+        if (styleId != null) {
+          globalStyles.put(styleId, style);
         }
       } else if (XmlPullParserUtil.isStartTag(xmlParser, TtmlNode.TAG_REGION)) {
+        @Nullable
         TtmlRegion ttmlRegion = parseRegionAttributes(xmlParser, cellResolution, ttsExtent);
         if (ttmlRegion != null) {
           globalRegions.put(ttmlRegion.id, ttmlRegion);
@@ -295,12 +312,12 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     return globalStyles;
   }
 
-  private void parseMetadata(XmlPullParser xmlParser, Map<String, String> imageMap)
+  private static void parseMetadata(XmlPullParser xmlParser, Map<String, String> imageMap)
       throws IOException, XmlPullParserException {
     do {
       xmlParser.next();
       if (XmlPullParserUtil.isStartTag(xmlParser, TtmlNode.TAG_IMAGE)) {
-        String id = XmlPullParserUtil.getAttributeValue(xmlParser, "id");
+        @Nullable String id = XmlPullParserUtil.getAttributeValue(xmlParser, "id");
         if (id != null) {
           String encodedBitmapData = xmlParser.nextText();
           imageMap.put(id, encodedBitmapData);
@@ -317,9 +334,10 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
    * fractions. In case of missing tts:extent the pixel defined regions can't be parsed, and null is
    * returned.
    */
-  private TtmlRegion parseRegionAttributes(
-      XmlPullParser xmlParser, CellResolution cellResolution, TtsExtent ttsExtent) {
-    String regionId = XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_ID);
+  @Nullable
+  private static TtmlRegion parseRegionAttributes(
+      XmlPullParser xmlParser, CellResolution cellResolution, @Nullable TtsExtent ttsExtent) {
+    @Nullable String regionId = XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_ID);
     if (regionId == null) {
       return null;
     }
@@ -383,8 +401,9 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
       Matcher originPixelMatcher = PIXEL_COORDINATES.matcher(regionOrigin);
       if (originPercentageMatcher.matches()) {
         try {
-          position = Float.parseFloat(originPercentageMatcher.group(1)) / 100f;
-          line = Float.parseFloat(originPercentageMatcher.group(2)) / 100f;
+          position =
+              Float.parseFloat(Assertions.checkNotNull(originPercentageMatcher.group(1))) / 100f;
+          line = Float.parseFloat(Assertions.checkNotNull(originPercentageMatcher.group(2))) / 100f;
         } catch (NumberFormatException e) {
           Log.w(TAG, "Ignoring region with malformed origin: " + regionOrigin);
           return null;
@@ -395,8 +414,8 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
           return null;
         }
         try {
-          int width = Integer.parseInt(originPixelMatcher.group(1));
-          int height = Integer.parseInt(originPixelMatcher.group(2));
+          int width = Integer.parseInt(Assertions.checkNotNull(originPixelMatcher.group(1)));
+          int height = Integer.parseInt(Assertions.checkNotNull(originPixelMatcher.group(2)));
           // Convert pixel values to fractions.
           position = width / (float) ttsExtent.width;
           line = height / (float) ttsExtent.height;
@@ -424,8 +443,10 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
       Matcher extentPixelMatcher = PIXEL_COORDINATES.matcher(regionExtent);
       if (extentPercentageMatcher.matches()) {
         try {
-          width = Float.parseFloat(extentPercentageMatcher.group(1)) / 100f;
-          height = Float.parseFloat(extentPercentageMatcher.group(2)) / 100f;
+          width =
+              Float.parseFloat(Assertions.checkNotNull(extentPercentageMatcher.group(1))) / 100f;
+          height =
+              Float.parseFloat(Assertions.checkNotNull(extentPercentageMatcher.group(2))) / 100f;
         } catch (NumberFormatException e) {
           Log.w(TAG, "Ignoring region with malformed extent: " + regionOrigin);
           return null;
@@ -436,8 +457,8 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
           return null;
         }
         try {
-          int extentWidth = Integer.parseInt(extentPixelMatcher.group(1));
-          int extentHeight = Integer.parseInt(extentPixelMatcher.group(2));
+          int extentWidth = Integer.parseInt(Assertions.checkNotNull(extentPixelMatcher.group(1)));
+          int extentHeight = Integer.parseInt(Assertions.checkNotNull(extentPixelMatcher.group(2)));
           // Convert pixel values to fractions.
           width = extentWidth / (float) ttsExtent.width;
           height = extentHeight / (float) ttsExtent.height;
@@ -492,6 +513,26 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     }
 
     float regionTextHeight = 1.0f / cellResolution.rows;
+
+    @Cue.VerticalType int verticalType = Cue.TYPE_UNSET;
+    @Nullable
+    String writingDirection =
+        XmlPullParserUtil.getAttributeValue(xmlParser, TtmlNode.ATTR_TTS_WRITING_MODE);
+    if (writingDirection != null) {
+      switch (Util.toLowerInvariant(writingDirection)) {
+          // TODO: Support horizontal RTL modes.
+        case TtmlNode.VERTICAL:
+        case TtmlNode.VERTICAL_LR:
+          verticalType = Cue.VERTICAL_TYPE_LR;
+          break;
+        case TtmlNode.VERTICAL_RL:
+          verticalType = Cue.VERTICAL_TYPE_RL;
+          break;
+        default:
+          // ignore
+          break;
+      }
+    }
     return new TtmlRegion(
         regionId,
         position,
@@ -502,15 +543,17 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
         height,
         /* textSizeType= */ Cue.TEXT_SIZE_TYPE_FRACTIONAL_IGNORE_PADDING,
         /* textSize= */ regionTextHeight,
+        verticalType,
         textAlignType);
   }
 
-  private String[] parseStyleIds(String parentStyleIds) {
+  private static String[] parseStyleIds(String parentStyleIds) {
     parentStyleIds = parentStyleIds.trim();
     return parentStyleIds.isEmpty() ? new String[0] : Util.split(parentStyleIds, "\\s+");
   }
 
-  private TtmlStyle parseStyleAttributes(XmlPullParser parser, TtmlStyle style) {
+  private static @PolyNull TtmlStyle parseStyleAttributes(
+      XmlPullParser parser, @PolyNull TtmlStyle style) {
     int attributeCount = parser.getAttributeCount();
     for (int i = 0; i < attributeCount; i++) {
       String attributeValue = parser.getAttributeValue(i);
@@ -558,19 +601,65 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
         case TtmlNode.ATTR_TTS_TEXT_ALIGN:
           switch (Util.toLowerInvariant(attributeValue)) {
             case TtmlNode.LEFT:
-              style = createIfNull(style).setTextAlign(Layout.Alignment.ALIGN_NORMAL);
-              break;
             case TtmlNode.START:
               style = createIfNull(style).setTextAlign(Layout.Alignment.ALIGN_NORMAL);
               break;
             case TtmlNode.RIGHT:
-              style = createIfNull(style).setTextAlign(Layout.Alignment.ALIGN_OPPOSITE);
-              break;
             case TtmlNode.END:
               style = createIfNull(style).setTextAlign(Layout.Alignment.ALIGN_OPPOSITE);
               break;
             case TtmlNode.CENTER:
               style = createIfNull(style).setTextAlign(Layout.Alignment.ALIGN_CENTER);
+              break;
+            default:
+              // ignore
+              break;
+          }
+          break;
+        case TtmlNode.ATTR_TTS_TEXT_COMBINE:
+          switch (Util.toLowerInvariant(attributeValue)) {
+            case TtmlNode.COMBINE_NONE:
+              style = createIfNull(style).setTextCombine(false);
+              break;
+            case TtmlNode.COMBINE_ALL:
+              style = createIfNull(style).setTextCombine(true);
+              break;
+            default:
+              // ignore
+              break;
+          }
+          break;
+        case TtmlNode.ATTR_TTS_RUBY:
+          switch (Util.toLowerInvariant(attributeValue)) {
+            case TtmlNode.RUBY_CONTAINER:
+              style = createIfNull(style).setRubyType(TtmlStyle.RUBY_TYPE_CONTAINER);
+              break;
+            case TtmlNode.RUBY_BASE:
+            case TtmlNode.RUBY_BASE_CONTAINER:
+              style = createIfNull(style).setRubyType(TtmlStyle.RUBY_TYPE_BASE);
+              break;
+            case TtmlNode.RUBY_TEXT:
+            case TtmlNode.RUBY_TEXT_CONTAINER:
+              style = createIfNull(style).setRubyType(TtmlStyle.RUBY_TYPE_TEXT);
+              break;
+            case TtmlNode.RUBY_DELIMITER:
+              style = createIfNull(style).setRubyType(TtmlStyle.RUBY_TYPE_DELIMITER);
+              break;
+            default:
+              // ignore
+              break;
+          }
+          break;
+        case TtmlNode.ATTR_TTS_RUBY_POSITION:
+          switch (Util.toLowerInvariant(attributeValue)) {
+            case TtmlNode.RUBY_BEFORE:
+              style = createIfNull(style).setRubyPosition(RubySpan.POSITION_OVER);
+              break;
+            case TtmlNode.RUBY_AFTER:
+              style = createIfNull(style).setRubyPosition(RubySpan.POSITION_UNDER);
+              break;
+            default:
+              // ignore
               break;
           }
           break;
@@ -598,21 +687,24 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     return style;
   }
 
-  private TtmlStyle createIfNull(TtmlStyle style) {
+  private static TtmlStyle createIfNull(@Nullable TtmlStyle style) {
     return style == null ? new TtmlStyle() : style;
   }
 
-  private TtmlNode parseNode(XmlPullParser parser, TtmlNode parent,
-      Map<String, TtmlRegion> regionMap, FrameAndTickRate frameAndTickRate)
+  private static TtmlNode parseNode(
+      XmlPullParser parser,
+      @Nullable TtmlNode parent,
+      Map<String, TtmlRegion> regionMap,
+      FrameAndTickRate frameAndTickRate)
       throws SubtitleDecoderException {
     long duration = C.TIME_UNSET;
     long startTime = C.TIME_UNSET;
     long endTime = C.TIME_UNSET;
     String regionId = TtmlNode.ANONYMOUS_REGION_ID;
-    String imageId = null;
-    String[] styleIds = null;
+    @Nullable String imageId = null;
+    @Nullable String[] styleIds = null;
     int attributeCount = parser.getAttributeCount();
-    TtmlStyle style = parseStyleAttributes(parser, null);
+    @Nullable TtmlStyle style = parseStyleAttributes(parser, null);
     String origin = null, extent = null;
     for (int i = 0; i < attributeCount; i++) {
       String attr = parser.getAttributeName(i);
@@ -676,8 +768,9 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
         endTime = parent.endTimeUs;
       }
     }
+
     return TtmlNode.buildNode(
-        parser.getName(), startTime, endTime, style, styleIds, regionId, imageId, origin, extent);
+        parser.getName(), startTime, endTime, style, styleIds, regionId, imageId, origin, extent, parent);
   }
 
   private static boolean isSupportedTag(String tag) {
@@ -714,7 +807,7 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     }
 
     if (matcher.matches()) {
-      String unit = matcher.group(3);
+      String unit = Assertions.checkNotNull(matcher.group(3));
       switch (unit) {
         case "px":
           out.setFontSizeUnit(TtmlStyle.FONT_SIZE_UNIT_PIXEL);
@@ -728,7 +821,7 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
         default:
           throw new SubtitleDecoderException("Invalid unit for fontSize: '" + unit + "'.");
       }
-      out.setFontSize(Float.valueOf(matcher.group(1)));
+      out.setFontSize(Float.parseFloat(Assertions.checkNotNull(matcher.group(1))));
     } else {
       throw new SubtitleDecoderException("Invalid expression for fontSize: '" + expression + "'.");
     }
@@ -749,18 +842,18 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
       throws SubtitleDecoderException {
     Matcher matcher = CLOCK_TIME.matcher(time);
     if (matcher.matches()) {
-      String hours = matcher.group(1);
+      String hours = Assertions.checkNotNull(matcher.group(1));
       double durationSeconds = Long.parseLong(hours) * 3600;
-      String minutes = matcher.group(2);
+      String minutes = Assertions.checkNotNull(matcher.group(2));
       durationSeconds += Long.parseLong(minutes) * 60;
-      String seconds = matcher.group(3);
+      String seconds = Assertions.checkNotNull(matcher.group(3));
       durationSeconds += Long.parseLong(seconds);
-      String fraction = matcher.group(4);
+      @Nullable String fraction = matcher.group(4);
       durationSeconds += (fraction != null) ? Double.parseDouble(fraction) : 0;
-      String frames = matcher.group(5);
+      @Nullable String frames = matcher.group(5);
       durationSeconds += (frames != null)
           ? Long.parseLong(frames) / frameAndTickRate.effectiveFrameRate : 0;
-      String subframes = matcher.group(6);
+      @Nullable String subframes = matcher.group(6);
       durationSeconds += (subframes != null)
           ? ((double) Long.parseLong(subframes)) / frameAndTickRate.subFrameRate
               / frameAndTickRate.effectiveFrameRate
@@ -769,9 +862,9 @@ public class TtmlDecoder extends SimpleSubtitleDecoder {
     }
     matcher = OFFSET_TIME.matcher(time);
     if (matcher.matches()) {
-      String timeValue = matcher.group(1);
+      String timeValue = Assertions.checkNotNull(matcher.group(1));
       double offsetSeconds = Double.parseDouble(timeValue);
-      String unit = matcher.group(2);
+      String unit = Assertions.checkNotNull(matcher.group(2));
       switch (unit) {
         case "h":
           offsetSeconds *= 3600;

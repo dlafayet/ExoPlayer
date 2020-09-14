@@ -15,16 +15,19 @@
  */
 package com.google.android.exoplayer2.source;
 
+import static java.lang.Math.min;
+
 import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.decoder.CryptoInfo;
 import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
-import com.google.android.exoplayer2.extractor.ExtractorInput;
 import com.google.android.exoplayer2.extractor.TrackOutput.CryptoData;
 import com.google.android.exoplayer2.source.SampleQueue.SampleExtrasHolder;
 import com.google.android.exoplayer2.upstream.Allocation;
 import com.google.android.exoplayer2.upstream.Allocator;
+import com.google.android.exoplayer2.upstream.DataReader;
 import com.google.android.exoplayer2.util.ParsableByteArray;
+import com.google.android.exoplayer2.util.Util;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -127,7 +130,7 @@ import java.util.Arrays;
     if (buffer.hasSupplementalData()) {
       // If there is supplemental data, the sample data is prefixed by its size.
       scratch.reset(4);
-      readData(extrasHolder.offset, scratch.data, 4);
+      readData(extrasHolder.offset, scratch.getData(), 4);
       int sampleSize = scratch.readUnsignedIntToInt();
       extrasHolder.offset += 4;
       extrasHolder.size -= 4;
@@ -177,8 +180,7 @@ import java.util.Arrays;
     return totalBytesWritten;
   }
 
-  public int sampleData(ExtractorInput input, int length, boolean allowEndOfInput)
-      throws IOException, InterruptedException {
+  public int sampleData(DataReader input, int length, boolean allowEndOfInput) throws IOException {
     length = preAppend(length);
     int bytesAppended =
         input.read(
@@ -224,9 +226,9 @@ import java.util.Arrays;
 
     // Read the signal byte.
     scratch.reset(1);
-    readData(offset, scratch.data, 1);
+    readData(offset, scratch.getData(), 1);
     offset++;
-    byte signalByte = scratch.data[0];
+    byte signalByte = scratch.getData()[0];
     boolean subsampleEncryption = (signalByte & 0x80) != 0;
     int ivSize = signalByte & 0x7F;
 
@@ -245,7 +247,7 @@ import java.util.Arrays;
     int subsampleCount;
     if (subsampleEncryption) {
       scratch.reset(2);
-      readData(offset, scratch.data, 2);
+      readData(offset, scratch.getData(), 2);
       offset += 2;
       subsampleCount = scratch.readUnsignedShort();
     } else {
@@ -264,7 +266,7 @@ import java.util.Arrays;
     if (subsampleEncryption) {
       int subsampleDataLength = 6 * subsampleCount;
       scratch.reset(subsampleDataLength);
-      readData(offset, scratch.data, subsampleDataLength);
+      readData(offset, scratch.getData(), subsampleDataLength);
       offset += subsampleDataLength;
       scratch.setPosition(0);
       for (int i = 0; i < subsampleCount; i++) {
@@ -277,7 +279,7 @@ import java.util.Arrays;
     }
 
     // Populate the cryptoInfo.
-    CryptoData cryptoData = extrasHolder.cryptoData;
+    CryptoData cryptoData = Util.castNonNull(extrasHolder.cryptoData);
     cryptoInfo.set(
         subsampleCount,
         clearDataSizes,
@@ -305,7 +307,7 @@ import java.util.Arrays;
     advanceReadTo(absolutePosition);
     int remaining = length;
     while (remaining > 0) {
-      int toCopy = Math.min(remaining, (int) (readAllocationNode.endPosition - absolutePosition));
+      int toCopy = min(remaining, (int) (readAllocationNode.endPosition - absolutePosition));
       Allocation allocation = readAllocationNode.allocation;
       target.put(allocation.data, readAllocationNode.translateOffset(absolutePosition), toCopy);
       remaining -= toCopy;
@@ -327,7 +329,7 @@ import java.util.Arrays;
     advanceReadTo(absolutePosition);
     int remaining = length;
     while (remaining > 0) {
-      int toCopy = Math.min(remaining, (int) (readAllocationNode.endPosition - absolutePosition));
+      int toCopy = min(remaining, (int) (readAllocationNode.endPosition - absolutePosition));
       Allocation allocation = readAllocationNode.allocation;
       System.arraycopy(
           allocation.data,
@@ -396,7 +398,7 @@ import java.util.Arrays;
           allocator.allocate(),
           new AllocationNode(writeAllocationNode.endPosition, allocationLength));
     }
-    return Math.min(length, (int) (writeAllocationNode.endPosition - totalBytesWritten));
+    return min(length, (int) (writeAllocationNode.endPosition - totalBytesWritten));
   }
 
   /**

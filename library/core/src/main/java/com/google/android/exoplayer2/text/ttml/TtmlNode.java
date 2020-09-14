@@ -15,29 +15,26 @@
  */
 package com.google.android.exoplayer2.text.ttml;
 
+import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COORDINATES;
+
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.text.Layout.Alignment;
 import android.text.SpannableStringBuilder;
 import android.util.Base64;
 import android.util.Pair;
-
+import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.util.Assertions;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
-
-import androidx.annotation.Nullable;
-
-import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COORDINATES;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 
 /**
  * A package internal representation of TTML node.
@@ -71,9 +68,25 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
   public static final String ATTR_TTS_FONT_FAMILY = "fontFamily";
   public static final String ATTR_TTS_FONT_WEIGHT = "fontWeight";
   public static final String ATTR_TTS_COLOR = "color";
+  public static final String ATTR_TTS_RUBY = "ruby";
+  public static final String ATTR_TTS_RUBY_POSITION = "rubyPosition";
   public static final String ATTR_TTS_TEXT_DECORATION = "textDecoration";
   public static final String ATTR_TTS_TEXT_ALIGN = "textAlign";
+  public static final String ATTR_TTS_TEXT_COMBINE = "textCombine";
+  public static final String ATTR_TTS_WRITING_MODE = "writingMode";
 
+  // Values for ruby
+  public static final String RUBY_CONTAINER = "container";
+  public static final String RUBY_BASE = "base";
+  public static final String RUBY_BASE_CONTAINER = "baseContainer";
+  public static final String RUBY_TEXT = "text";
+  public static final String RUBY_TEXT_CONTAINER = "textContainer";
+  public static final String RUBY_DELIMITER = "delimiter";
+
+  // Values for rubyPosition
+  public static final String RUBY_BEFORE = "before";
+  public static final String RUBY_AFTER = "after";
+  // Values for textDecoration
   public static final String LINETHROUGH = "linethrough";
   public static final String NO_LINETHROUGH = "nolinethrough";
   public static final String UNDERLINE = "underline";
@@ -81,11 +94,21 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
   public static final String ITALIC = "italic";
   public static final String BOLD = "bold";
 
+  // Values for textAlign
   public static final String LEFT = "left";
   public static final String CENTER = "center";
   public static final String RIGHT = "right";
   public static final String START = "start";
   public static final String END = "end";
+
+  // Values for textCombine
+  public static final String COMBINE_NONE = "none";
+  public static final String COMBINE_ALL = "all";
+
+  // Values for writingMode
+  public static final String VERTICAL = "tb";
+  public static final String VERTICAL_LR = "tblr";
+  public static final String VERTICAL_RL = "tbrl";
 
   @Nullable public final String tag;
   @Nullable public final String text;
@@ -96,11 +119,12 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
   @Nullable private final String[] styleIds;
   public final String regionId;
   @Nullable public final String imageId;
+  @Nullable public final TtmlNode parent;
 
   private final HashMap<String, Integer> nodeStartsByRegion;
   private final HashMap<String, Integer> nodeEndsByRegion;
 
-  private List<TtmlNode> children;
+  private @MonotonicNonNull List<TtmlNode> children;
 
   private static class RegionOverride {
     float line = Cue.DIMEN_UNSET;
@@ -120,7 +144,8 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
         /* style= */ null,
         /* styleIds= */ null,
         ANONYMOUS_REGION_ID,
-        /* imageId= */ null);
+        /* imageId= */ null,
+        /* parent= */ null);
   }
 
   public static TtmlNode buildNode(
@@ -130,9 +155,10 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
       @Nullable TtmlStyle style,
       @Nullable String[] styleIds,
       String regionId,
-      @Nullable String imageId) {
+      @Nullable String imageId,
+      @Nullable TtmlNode parent) {
     return new TtmlNode(
-        tag, /* text= */ null, startTimeUs, endTimeUs, style, styleIds, regionId, imageId);
+        tag, /* text= */ null, startTimeUs, endTimeUs, style, styleIds, regionId, imageId, parent);
   }
 
   public static TtmlNode buildNode(
@@ -144,15 +170,16 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
       String regionId,
       @Nullable String imageId,
       String origin,
-      String extent) {
+      String extent,
+      @Nullable TtmlNode parent) {
     return new TtmlNode(
-        tag, /* text= */ null, startTimeUs, endTimeUs, style, styleIds, regionId, imageId, origin, extent);
+        tag, /* text= */ null, startTimeUs, endTimeUs, style, styleIds, regionId, imageId, origin, extent, parent);
   }
 
   public static TtmlNode buildNode(String tag, long startTimeUs, long endTimeUs,
-      TtmlStyle style, String[] styleIds, String regionId, String origin, String extent) {
+      TtmlStyle style, String[] styleIds, String regionId, String origin, String extent, @Nullable TtmlNode parent) {
     return new TtmlNode(tag, null, startTimeUs, endTimeUs, style, styleIds, regionId, origin,
-        extent);
+        extent, parent);
   }
 
   private TtmlNode(
@@ -163,7 +190,8 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
       @Nullable TtmlStyle style,
       @Nullable String[] styleIds,
       String regionId,
-      @Nullable String imageId) {
+      @Nullable String imageId,
+      @Nullable TtmlNode parent) {
     this.tag = tag;
     this.text = text;
     this.imageId = imageId;
@@ -173,6 +201,7 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
     this.startTimeUs = startTimeUs;
     this.endTimeUs = endTimeUs;
     this.regionId = Assertions.checkNotNull(regionId);
+    this.parent = parent;
     nodeStartsByRegion = new HashMap<>();
     nodeEndsByRegion = new HashMap<>();
   }
@@ -187,8 +216,9 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
       String regionId,
       @Nullable String imageId,
       String origin,
-      String extent) {
-    this(tag, text, startTimeUs, endTimeUs, style, styleIds, regionId, imageId);
+      String extent,
+      @Nullable TtmlNode parent) {
+    this(tag, text, startTimeUs, endTimeUs, style, styleIds, regionId, imageId, parent);
     if(origin != null) {
       Matcher originMatcher = PERCENTAGE_COORDINATES.matcher(origin);
       if (originMatcher.matches()) {
@@ -220,8 +250,8 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
   }
 
   private TtmlNode(String tag, String text, long startTimeUs, long endTimeUs,
-      TtmlStyle style, String[] styleIds, String regionId, String origin, String extent) {
-    this(tag, text, startTimeUs, endTimeUs, style, styleIds, regionId, null);
+      TtmlStyle style, String[] styleIds, String regionId, String origin, String extent, @Nullable TtmlNode parent) {
+    this(tag, text, startTimeUs, endTimeUs, style, styleIds, regionId, null, parent);
     if (origin != null) {
       Matcher originMatcher = PERCENTAGE_COORDINATES.matcher(origin);
       if (originMatcher.matches()) {
@@ -307,6 +337,7 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
     }
   }
 
+  @Nullable
   public String[] getStyleIds() {
     return styleIds;
   }
@@ -320,7 +351,7 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
     List<Pair<String, String>> regionImageOutputs = new ArrayList<>();
     traverseForImage(timeUs, regionId, regionImageOutputs);
 
-    TreeMap<String, SpannableStringBuilder> regionTextOutputs = new TreeMap<>();
+    TreeMap<String, Cue.Builder> regionTextOutputs = new TreeMap<>();
     TreeMap<String, RegionOverride> regionOverrides = new TreeMap<>();
     traverseForText(timeUs, false, regionId, regionTextOutputs, regionOverrides);
     traverseForStyle(timeUs, globalStyles, regionTextOutputs);
@@ -329,7 +360,7 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
 
     // Create image based cues.
     for (Pair<String, String> regionImagePair : regionImageOutputs) {
-      String encodedBitmapData = imageMap.get(regionImagePair.second);
+      @Nullable String encodedBitmapData = imageMap.get(regionImagePair.second);
       if (encodedBitmapData == null) {
         // Image reference points to an invalid image. Do nothing.
         continue;
@@ -337,52 +368,62 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
 
       byte[] bitmapData = Base64.decode(encodedBitmapData, Base64.DEFAULT);
       Bitmap bitmap = BitmapFactory.decodeByteArray(bitmapData, /* offset= */ 0, bitmapData.length);
-      TtmlRegion region = regionMap.get(regionImagePair.first);
+      TtmlRegion region = Assertions.checkNotNull(regionMap.get(regionImagePair.first));
 
       cues.add(
-          new Cue(
-              bitmap,
-              region.position,
-              Cue.ANCHOR_TYPE_START,
-              region.line,
-              region.lineAnchor,
-              region.width,
-              region.height));
+          new Cue.Builder()
+              .setBitmap(bitmap)
+              .setPosition(region.position)
+              .setPositionAnchor(Cue.ANCHOR_TYPE_START)
+              .setLine(region.line, Cue.LINE_TYPE_FRACTION)
+              .setLineAnchor(region.lineAnchor)
+              .setSize(region.width)
+              .setBitmapHeight(region.height)
+              .setVerticalType(region.verticalType)
+              .build());
     }
 
     // Create text based cues.
-    for (Entry<String, SpannableStringBuilder> entry : regionTextOutputs.entrySet()) {
-      TtmlRegion region = regionMap.get(entry.getKey());
-      RegionOverride override = regionOverrides.get(entry.getKey());
-      float cueLine = region.line;
-      if(override != null && override.line != Cue.DIMEN_UNSET) {
-        if (region.lineAnchor == Cue.ANCHOR_TYPE_START) {
-          cueLine = override.line;
-        } else if(region.lineAnchor == Cue.ANCHOR_TYPE_END) {
-          cueLine = override.height != Cue.DIMEN_UNSET ? override.line + override.height : 1f;
-        } else {
-          cueLine = override.height != Cue.DIMEN_UNSET ? override.line + override.height / 2 : override.line / 2 + .5f;
-        }
-      }
-      Alignment textAlignment = region.positionAnchor == Cue.ANCHOR_TYPE_START ? Alignment.ALIGN_NORMAL :
-          region.positionAnchor == Cue.ANCHOR_TYPE_END ? Alignment.ALIGN_OPPOSITE : Alignment.ALIGN_CENTER;
-      float cuePosition = override != null && override.position != Cue.DIMEN_UNSET ? override.position : region.position;
-      float cueWidth = override != null && override.width != Cue.DIMEN_UNSET ? override.width : region.width;
-      cues.add(
-          new Cue(
-              cleanUpText(entry.getValue()),
-              textAlignment,
-              cueLine,
-              region.lineType,
-              region.lineAnchor,
-              cuePosition,
-              /* positionAnchor= */ Cue.TYPE_UNSET,
-              cueWidth,
-              region.textSizeType,
-              region.textSize));
+    for (Map.Entry<String, Cue.Builder> entry : regionTextOutputs.entrySet()) {
+      TtmlRegion region = Assertions.checkNotNull(regionMap.get(entry.getKey()));
+      Cue.Builder regionOutput = entry.getValue();
+      cleanUpText((SpannableStringBuilder) Assertions.checkNotNull(regionOutput.getText()));
+      regionOutput.setLine(region.line, region.lineType);
+      regionOutput.setLineAnchor(region.lineAnchor);
+      regionOutput.setPosition(region.position);
+      regionOutput.setSize(region.width);
+      regionOutput.setTextSize(region.textSize, region.textSizeType);
+      regionOutput.setVerticalType(region.verticalType);
+      applyRegionOverride(regionOverrides.get(entry.getKey()), regionOutput);
+      cues.add(regionOutput.build());
     }
 
     return cues;
+  }
+
+  private void applyRegionOverride(RegionOverride override, Cue.Builder regionOutput) {
+    if (override == null) {
+      return;
+    }
+    if (override.line != Cue.DIMEN_UNSET) {
+      if (regionOutput.getLineAnchor() == Cue.ANCHOR_TYPE_START) {
+        regionOutput.setLine(override.line, regionOutput.getLineType());
+      } else if (regionOutput.getLineAnchor() == Cue.ANCHOR_TYPE_END) {
+        regionOutput
+            .setLine(override.height != Cue.DIMEN_UNSET ? override.line + override.height : 1f,
+                regionOutput.getLineType());
+      } else {
+        regionOutput.setLine(
+            override.height != Cue.DIMEN_UNSET ? override.line + override.height / 2
+                : override.line / 2 + .5f, regionOutput.getLineType());
+      }
+    }
+    if (override.position != Cue.DIMEN_UNSET) {
+      regionOutput.setPosition(override.position);
+    }
+    if (override.width != Cue.DIMEN_UNSET) {
+      regionOutput.setSize(override.width);
+    }
   }
 
   private void traverseForImage(
@@ -401,7 +442,7 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
       long timeUs,
       boolean descendsPNode,
       String inheritedRegion,
-      Map<String, SpannableStringBuilder> regionOutputs,
+      Map<String, Cue.Builder> regionOutputs,
       Map<String, RegionOverride> regionOverrides) {
     nodeStartsByRegion.clear();
     nodeEndsByRegion.clear();
@@ -413,13 +454,14 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
     String resolvedRegionId = ANONYMOUS_REGION_ID.equals(regionId) ? inheritedRegion : regionId;
 
     if (isTextNode && descendsPNode) {
-      getRegionOutput(resolvedRegionId, regionOutputs).append(text);
+      getRegionOutputText(resolvedRegionId, regionOutputs).append(Assertions.checkNotNull(text));
     } else if (TAG_BR.equals(tag) && descendsPNode) {
-      getRegionOutput(resolvedRegionId, regionOutputs).append('\n');
+      getRegionOutputText(resolvedRegionId, regionOutputs).append('\n');
     } else if (isActive(timeUs)) {
       // This is a container node, which can contain zero or more children.
-      for (Entry<String, SpannableStringBuilder> entry : regionOutputs.entrySet()) {
-        nodeStartsByRegion.put(entry.getKey(), entry.getValue().length());
+      for (Map.Entry<String, Cue.Builder> entry : regionOutputs.entrySet()) {
+        nodeStartsByRegion.put(
+            entry.getKey(), Assertions.checkNotNull(entry.getValue().getText()).length());
       }
 
       boolean isPNode = TAG_P.equals(tag);
@@ -428,37 +470,39 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
             regionOutputs, regionOverrides);
       }
       if (isPNode) {
-        TtmlRenderUtil.endParagraph(getRegionOutput(resolvedRegionId, regionOutputs));
+        TtmlRenderUtil.endParagraph(getRegionOutputText(resolvedRegionId, regionOutputs));
         if(regionOverride != null) regionOverrides.put(resolvedRegionId, regionOverride);
       }
 
-      for (Entry<String, SpannableStringBuilder> entry : regionOutputs.entrySet()) {
-        nodeEndsByRegion.put(entry.getKey(), entry.getValue().length());
+      for (Map.Entry<String, Cue.Builder> entry : regionOutputs.entrySet()) {
+        nodeEndsByRegion.put(
+            entry.getKey(), Assertions.checkNotNull(entry.getValue().getText()).length());
       }
     }
   }
 
-  private static SpannableStringBuilder getRegionOutput(
-      String resolvedRegionId, Map<String, SpannableStringBuilder> regionOutputs) {
+  private static SpannableStringBuilder getRegionOutputText(
+      String resolvedRegionId, Map<String, Cue.Builder> regionOutputs) {
     if (!regionOutputs.containsKey(resolvedRegionId)) {
-      regionOutputs.put(resolvedRegionId, new SpannableStringBuilder());
+      Cue.Builder regionOutput = new Cue.Builder();
+      regionOutput.setText(new SpannableStringBuilder());
+      regionOutputs.put(resolvedRegionId, regionOutput);
     }
-    return regionOutputs.get(resolvedRegionId);
+    return (SpannableStringBuilder)
+        Assertions.checkNotNull(regionOutputs.get(resolvedRegionId).getText());
   }
 
   private void traverseForStyle(
-      long timeUs,
-      Map<String, TtmlStyle> globalStyles,
-      Map<String, SpannableStringBuilder> regionOutputs) {
+      long timeUs, Map<String, TtmlStyle> globalStyles, Map<String, Cue.Builder> regionOutputs) {
     if (!isActive(timeUs)) {
       return;
     }
-    for (Entry<String, Integer> entry : nodeEndsByRegion.entrySet()) {
+    for (Map.Entry<String, Integer> entry : nodeEndsByRegion.entrySet()) {
       String regionId = entry.getKey();
       int start = nodeStartsByRegion.containsKey(regionId) ? nodeStartsByRegion.get(regionId) : 0;
       int end = entry.getValue();
       if (start != end) {
-        SpannableStringBuilder regionOutput = regionOutputs.get(regionId);
+        Cue.Builder regionOutput = Assertions.checkNotNull(regionOutputs.get(regionId));
         applyStyleToOutput(globalStyles, regionOutput, start, end);
       }
     }
@@ -468,21 +512,28 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
   }
 
   private void applyStyleToOutput(
-      Map<String, TtmlStyle> globalStyles,
-      SpannableStringBuilder regionOutput,
-      int start,
-      int end) {
-    TtmlStyle resolvedStyle = TtmlRenderUtil.resolveStyle(style, styleIds, globalStyles);
+      Map<String, TtmlStyle> globalStyles, Cue.Builder regionOutput, int start, int end) {
+    @Nullable TtmlStyle resolvedStyle = TtmlRenderUtil.resolveStyle(style, styleIds, globalStyles);
+    @Nullable SpannableStringBuilder text = (SpannableStringBuilder) regionOutput.getText();
+    if (text == null) {
+      text = new SpannableStringBuilder();
+      regionOutput.setText(text);
+    }
     if (resolvedStyle != null) {
-      TtmlRenderUtil.applyStylesToSpan(regionOutput, start, end, resolvedStyle);
+      TtmlRenderUtil.applyStylesToSpan(text, start, end, resolvedStyle, parent, globalStyles);
+      regionOutput.setTextAlignment(resolvedStyle.getTextAlign());
     }
   }
 
-  private SpannableStringBuilder cleanUpText(SpannableStringBuilder builder) {
+  private static void cleanUpText(SpannableStringBuilder builder) {
     // Having joined the text elements, we need to do some final cleanup on the result.
-    // 1. Collapse multiple consecutive spaces into a single space.
-    int builderLength = builder.length();
-    for (int i = 0; i < builderLength; i++) {
+    // Remove any text covered by a DeleteTextSpan (e.g. ruby text).
+    DeleteTextSpan[] deleteTextSpans = builder.getSpans(0, builder.length(), DeleteTextSpan.class);
+    for (DeleteTextSpan deleteTextSpan : deleteTextSpans) {
+      builder.replace(builder.getSpanStart(deleteTextSpan), builder.getSpanEnd(deleteTextSpan), "");
+    }
+    // Collapse multiple consecutive spaces into a single space.
+    for (int i = 0; i < builder.length(); i++) {
       if (builder.charAt(i) == ' ') {
         int j = i + 1;
         while (j < builder.length() && builder.charAt(j) == ' ') {
@@ -491,38 +542,31 @@ import static com.google.android.exoplayer2.text.ttml.TtmlDecoder.PERCENTAGE_COO
         int spacesToDelete = j - (i + 1);
         if (spacesToDelete > 0) {
           builder.delete(i, i + spacesToDelete);
-          builderLength -= spacesToDelete;
         }
       }
     }
-    // 2. Remove any spaces from the start of each line.
-    if (builderLength > 0 && builder.charAt(0) == ' ') {
+    // Remove any spaces from the start of each line.
+    if (builder.length() > 0 && builder.charAt(0) == ' ') {
       builder.delete(0, 1);
-      builderLength--;
     }
-    for (int i = 0; i < builderLength - 1; i++) {
+    for (int i = 0; i < builder.length() - 1; i++) {
       if (builder.charAt(i) == '\n' && builder.charAt(i + 1) == ' ') {
         builder.delete(i + 1, i + 2);
-        builderLength--;
       }
     }
-    // 3. Remove any spaces from the end of each line.
-    if (builderLength > 0 && builder.charAt(builderLength - 1) == ' ') {
-      builder.delete(builderLength - 1, builderLength);
-      builderLength--;
+    // Remove any spaces from the end of each line.
+    if (builder.length() > 0 && builder.charAt(builder.length() - 1) == ' ') {
+      builder.delete(builder.length() - 1, builder.length());
     }
-    for (int i = 0; i < builderLength - 1; i++) {
+    for (int i = 0; i < builder.length() - 1; i++) {
       if (builder.charAt(i) == ' ' && builder.charAt(i + 1) == '\n') {
         builder.delete(i, i + 1);
-        builderLength--;
       }
     }
-    // 4. Trim a trailing newline, if there is one.
-    if (builderLength > 0 && builder.charAt(builderLength - 1) == '\n') {
-      builder.delete(builderLength - 1, builderLength);
-      /*builderLength--;*/
+    // Trim a trailing newline, if there is one.
+    if (builder.length() > 0 && builder.charAt(builder.length() - 1) == '\n') {
+      builder.delete(builder.length() - 1, builder.length());
     }
-    return builder;
   }
 
 }

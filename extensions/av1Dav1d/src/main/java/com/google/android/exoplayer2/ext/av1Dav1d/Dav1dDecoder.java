@@ -20,6 +20,7 @@ import android.view.Surface;
 import androidx.annotation.Nullable;
 
 import com.google.android.exoplayer2.C;
+import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
 import com.google.android.exoplayer2.decoder.SimpleDecoder;
 import com.google.android.exoplayer2.util.Util;
 import com.google.android.exoplayer2.video.VideoDecoderInputBuffer;
@@ -29,8 +30,7 @@ import java.nio.ByteBuffer;
 
 /** Dav1d decoder. */
 public class Dav1dDecoder
-    extends SimpleDecoder<VideoDecoderInputBuffer, VideoDecoderOutputBuffer,
-        Dav1dDecoderException> implements VideoDecoderOutputBuffer.Owner {
+    extends SimpleDecoder<VideoDecoderInputBuffer, VideoDecoderOutputBuffer, Dav1dDecoderException> implements VideoDecoderOutputBuffer.Owner<VideoDecoderOutputBuffer> {
 
     // LINT.IfChange
     private static final int DAV1D_ERROR = 0;
@@ -85,7 +85,7 @@ public class Dav1dDecoder
 
     @Override
     protected VideoDecoderInputBuffer createInputBuffer() {
-        return new VideoDecoderInputBuffer();
+        return new VideoDecoderInputBuffer(DecoderInputBuffer.BUFFER_REPLACEMENT_MODE_DIRECT);
     }
 
     @Override
@@ -120,7 +120,7 @@ public class Dav1dDecoder
             outputBuffer.addFlag(C.BUFFER_FLAG_DECODE_ONLY);
         }
         if (!decodeOnly) {
-            outputBuffer.colorInfo = inputBuffer.colorInfo;
+            outputBuffer.format = inputBuffer.format;
         }
 
         return null;
@@ -199,5 +199,4 @@ public class Dav1dDecoder
      * @return A string describing the last encountered error.
      */
     private native String dav1dGetErrorMessage(long context);
-
 }
