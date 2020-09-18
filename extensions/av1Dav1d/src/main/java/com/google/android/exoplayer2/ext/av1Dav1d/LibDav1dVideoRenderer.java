@@ -323,9 +323,6 @@ public class LibDav1dVideoRenderer extends DecoderVideoRenderer {
         || !Dav1dLibrary.isAvailable()) {
       return RendererCapabilities.create(FORMAT_UNSUPPORTED_TYPE);
     }
-    if (format.exoMediaCryptoType != null) {
-      return RendererCapabilities.create(FORMAT_UNSUPPORTED_DRM);
-    }
     return RendererCapabilities.create(FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED);
   }
 
