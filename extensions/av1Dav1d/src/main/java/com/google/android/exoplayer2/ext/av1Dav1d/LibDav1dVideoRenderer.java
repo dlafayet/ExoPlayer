@@ -28,16 +28,13 @@ import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.PlayerMessage.Target;
 import com.google.android.exoplayer2.RendererCapabilities;
-import com.google.android.exoplayer2.decoder.SimpleDecoder;
-import com.google.android.exoplayer2.drm.DrmSessionManager;
+import com.google.android.exoplayer2.decoder.DecoderException;
 import com.google.android.exoplayer2.drm.ExoMediaCrypto;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.TraceUtil;
 import com.google.android.exoplayer2.util.Util;
-import com.google.android.exoplayer2.video.SimpleDecoderVideoRenderer;
-import com.google.android.exoplayer2.video.VideoDecoderException;
-import com.google.android.exoplayer2.video.VideoDecoderInputBuffer;
+import com.google.android.exoplayer2.video.DecoderVideoRenderer;
 import com.google.android.exoplayer2.video.VideoDecoderOutputBuffer;
 import com.google.android.exoplayer2.video.VideoDecoderOutputBufferRenderer;
 import com.google.android.exoplayer2.video.VideoRendererEventListener;
@@ -54,7 +51,7 @@ import com.google.android.exoplayer2.video.VideoRendererEventListener;
  *       VideoDecoderOutputBufferRenderer}, or null.
  * </ul>
  */
-public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
+public class LibDav1dVideoRenderer extends DecoderVideoRenderer {
 
   static final String TAG = "LibDav1dVideoRenderer";
 
@@ -146,36 +143,15 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
       int threads,
       int numInputBuffers,
       int numOutputBuffers) {
-    super(
-        allowedJoiningTimeMs,
-        eventHandler,
-        eventListener,
-        maxDroppedFramesToNotify,
-        null,
-        /* playClearSamplesWithoutKeys= */ false);
+    super(allowedJoiningTimeMs, eventHandler, eventListener, maxDroppedFramesToNotify);
     this.threads = threads;
     this.numInputBuffers = numInputBuffers;
     this.numOutputBuffers = numOutputBuffers;
   }
 
   @Override
-  protected int supportsFormatInternal(
-      @Nullable DrmSessionManager<ExoMediaCrypto> drmSessionManager, Format format) {
-    if (!MimeTypes.VIDEO_AV1.equalsIgnoreCase(format.sampleMimeType)
-        || !Dav1dLibrary.isAvailable()) {
-      return RendererCapabilities.create(FORMAT_UNSUPPORTED_TYPE);
-    }
-    Log.d(TAG, format.sampleMimeType + " supported");
-    return RendererCapabilities.create(FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED);
-  }
-
-  @Override
-  protected SimpleDecoder<
-          VideoDecoderInputBuffer,
-          ? extends VideoDecoderOutputBuffer,
-          ? extends VideoDecoderException>
-      createDecoder(Format format, @Nullable ExoMediaCrypto mediaCrypto)
-          throws VideoDecoderException {
+  protected Dav1dDecoder createDecoder(Format format, @Nullable ExoMediaCrypto mediaCrypto)
+          throws Dav1dDecoderException {
     TraceUtil.beginSection("createDav1dDecoder");
     Log.d(TAG, "Create Dav1dDecoder");
     int initialInputBufferSize =
@@ -199,7 +175,7 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
   @Override
   protected void renderOutputBuffer(
       VideoDecoderOutputBuffer outputBuffer, long presentationTimeUs, Format outputFormat)
-      throws VideoDecoderException {
+      throws DecoderException {
     super.renderOutputBuffer(outputBuffer, presentationTimeUs, outputFormat);
 
     renderedFrameCountInCurrentWindow++;
@@ -334,5 +310,24 @@ public class LibDav1dVideoRenderer extends SimpleDecoderVideoRenderer {
   }
 
   protected void logOutputFrame(long timeUs, long positionUs){
+  }
+
+  @Override
+  public String getName() {
+    return TAG;
+  }
+
+  @Override
+  public int supportsFormat(Format format) throws ExoPlaybackException {
+    if (!MimeTypes.VIDEO_AV1.equalsIgnoreCase(format.sampleMimeType)
+        || !Dav1dLibrary.isAvailable()) {
+      return RendererCapabilities.create(FORMAT_UNSUPPORTED_TYPE);
+    }
+    return RendererCapabilities.create(FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED);
+  }
+
+  @Override
+  protected boolean canKeepCodec(Format oldFormat, Format newFormat) {
+    return true;
   }
 }
