@@ -1735,7 +1735,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
       playbackInfo = playbackInfo.copyWithTimeline(timeline);
       if (!timeline.isEmpty()) {
         // Retain pending seek position only while the timeline is still empty.
-        pendingInitialSeekPosition = null;
+        // NFLX - do not reset pending seek position - we want to defer resetting until the SeekMap
+        // is available so we can snap to the start of the video chunk
+        // pendingInitialSeekPosition = null;
+        // END NFLX
       }
       handleLoadingMediaPeriodChanged(/* loadingTrackSelectionChanged= */ false);
     }
