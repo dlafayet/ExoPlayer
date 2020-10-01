@@ -2108,7 +2108,7 @@ public class SimpleExoPlayer extends BasePlayer
   }
 
   private void verifyApplicationThread() {
-    if (Looper.myLooper() != getApplicationLooper()) {
+    if (!hasNotifiedFullWrongThreadWarning && Looper.myLooper() != getApplicationLooper()) {
       if (throwsWhenUsingWrongThread) {
         throw new IllegalStateException(WRONG_THREAD_ERROR_MESSAGE);
       }
