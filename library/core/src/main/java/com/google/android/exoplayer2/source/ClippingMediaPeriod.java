@@ -342,9 +342,13 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
         return C.RESULT_BUFFER_READ;
       }
 
-      if(shouldIncludeBufferAsPeriodStart(buffer)) {
-        buffer.clearFlag(C.BUFFER_FLAG_DECODE_ONLY);
-      }
+        //SPY-32287: We are disabling this functionality. Since it breaks the seek functionality for
+        //xHE-AAC titles. The audio pcm is not dropped in the renderer during the seek operation.
+        //Would need to be addressed as part of SPY-32336
+//      if(shouldIncludeBufferAsPeriodStart(buffer)) {
+//        buffer.clearFlag(C.BUFFER_FLAG_DECODE_ONLY);
+//      }
+
       /**
        * Netflix - splice audio in segment start and segment end
        * Audio mime supports are AAC and EAC3
