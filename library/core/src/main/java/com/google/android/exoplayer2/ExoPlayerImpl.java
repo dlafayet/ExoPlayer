@@ -1007,8 +1007,8 @@ import java.util.concurrent.TimeoutException;
       } else {
         // A change in window uid must be justified by one of the reasons above.
         // NFLX - by default exoplayer ignores noop seeks (when we try to seek to a position that
-        // the palyer is already at). we change this becuase our UI relies on the player state
-        // trnasitions to determine when the seek is finished. this causes us to see transitions
+        // the player is already at). we change this because our UI relies on the player state
+        // transitions to determine when the seek is finished. this causes us to see transitions
         // without a cause (because exoplayer isn't actually doing anything during this seek).
         // in this case, we force the reason to "seek" instead of throwing
         transitionReason = MEDIA_ITEM_TRANSITION_REASON_SEEK;
