@@ -2118,6 +2118,7 @@ public class SimpleExoPlayer extends BasePlayer
           case "getCurrentPosition":
           case "getCurrentTimeline":
           case "getCurrentWindowIndex":
+          case "getDuration":
           case "getBufferedPosition":
           case "getRepeatMode":
           case "getShuffleModeEnabled":
