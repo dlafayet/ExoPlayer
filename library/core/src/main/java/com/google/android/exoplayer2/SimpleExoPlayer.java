@@ -2122,6 +2122,7 @@ public class SimpleExoPlayer extends BasePlayer
           case "getBufferedPosition":
           case "getRepeatMode":
           case "getShuffleModeEnabled":
+          case "createMessage":
             return;
         }
       }
