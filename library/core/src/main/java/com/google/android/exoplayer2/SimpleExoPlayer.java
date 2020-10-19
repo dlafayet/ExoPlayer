@@ -2108,7 +2108,27 @@ public class SimpleExoPlayer extends BasePlayer
   }
 
   private void verifyApplicationThread() {
-    if (!hasNotifiedFullWrongThreadWarning && Looper.myLooper() != getApplicationLooper()) {
+    // NFLX - there are some known usages of getters on non-application-looper (mainly ASE
+    // and reporting). since these are difficult usages to remove and the worst case in using
+    // them is stale data, we allow these usages only
+    if (throwsWhenUsingWrongThread) {
+      StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+      if (stack != null && stack.length > 3) {
+        switch(stack[3].getMethodName()) {
+          case "getCurrentPosition":
+          case "getCurrentTimeline":
+          case "getCurrentWindowIndex":
+          case "getBufferedPosition":
+          case "getRepeatMode":
+          case "getShuffleModeEnabled":
+            return;
+        }
+      }
+    } else {
+      return;
+    }
+    // END NFLX
+    if (Looper.myLooper() != getApplicationLooper()) {
       if (throwsWhenUsingWrongThread) {
         throw new IllegalStateException(WRONG_THREAD_ERROR_MESSAGE);
       }
