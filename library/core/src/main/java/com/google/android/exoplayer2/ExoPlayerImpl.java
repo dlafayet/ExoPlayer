@@ -1,4 +1,4 @@
-/*
+ /*
  * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -1342,10 +1342,14 @@ import java.util.concurrent.TimeoutException;
   }
 
   private long periodPositionUsToWindowPositionMs(MediaPeriodId periodId, long positionUs) {
-    long positionMs = C.usToMs(positionUs);
-    playbackInfo.timeline.getPeriodByUid(periodId.periodUid, period);
-    positionMs += period.getPositionInWindowMs();
-    return positionMs;
+    try {
+      long positionMs = C.usToMs(positionUs);
+      playbackInfo.timeline.getPeriodByUid(periodId.periodUid, period);
+      positionMs += period.getPositionInWindowMs();
+      return positionMs;
+    } catch (Exception e) {
+      return C.usToMs(positionUs);
+    }
   }
 
   private static final class PlaybackInfoUpdate implements Runnable {
