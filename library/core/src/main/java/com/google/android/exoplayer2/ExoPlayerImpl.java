@@ -760,6 +760,8 @@ import java.util.concurrent.TimeoutException;
 
   @Override
   public long getDuration() {
+    PlaybackInfo playbackInfo = this.playbackInfo;
+    Timeline.Period period = new Timeline.Period();
     if (isPlayingAd()) {
       MediaPeriodId periodId = playbackInfo.periodId;
       playbackInfo.timeline.getPeriodByUid(periodId.periodUid, period);
@@ -771,17 +773,19 @@ import java.util.concurrent.TimeoutException;
 
   @Override
   public long getCurrentPosition() {
+    PlaybackInfo playbackInfo = this.playbackInfo;
     if (playbackInfo.timeline.isEmpty()) {
       return maskingWindowPositionMs;
     } else if (playbackInfo.periodId.isAd()) {
       return C.usToMs(playbackInfo.positionUs);
     } else {
-      return periodPositionUsToWindowPositionMs(playbackInfo.periodId, playbackInfo.positionUs);
+      return periodPositionUsToWindowPositionMs(playbackInfo, playbackInfo.periodId, playbackInfo.positionUs);
     }
   }
 
   @Override
   public long getBufferedPosition() {
+    PlaybackInfo playbackInfo = this.playbackInfo;
     if (isPlayingAd()) {
       return playbackInfo.loadingMediaPeriodId.equals(playbackInfo.periodId)
           ? C.usToMs(playbackInfo.bufferedPositionUs)
@@ -812,6 +816,9 @@ import java.util.concurrent.TimeoutException;
 
   @Override
   public long getContentPosition() {
+    PlaybackInfo playbackInfo = this.playbackInfo;
+    Timeline.Period period = new Timeline.Period();
+    Timeline.Window window = new Timeline.Window();
     if (isPlayingAd()) {
       playbackInfo.timeline.getPeriodByUid(playbackInfo.periodId.periodUid, period);
       return playbackInfo.requestedContentPositionUs == C.TIME_UNSET
@@ -824,6 +831,9 @@ import java.util.concurrent.TimeoutException;
 
   @Override
   public long getContentBufferedPosition() {
+    PlaybackInfo playbackInfo = this.playbackInfo;
+    Timeline.Period period = new Timeline.Period();
+    Timeline.Window window = new Timeline.Window();
     if (playbackInfo.timeline.isEmpty()) {
       return maskingWindowPositionMs;
     }
@@ -842,6 +852,7 @@ import java.util.concurrent.TimeoutException;
       }
     }
     return periodPositionUsToWindowPositionMs(
+        playbackInfo,
         playbackInfo.loadingMediaPeriodId, contentBufferedPositionUs);
   }
 
@@ -877,6 +888,8 @@ import java.util.concurrent.TimeoutException;
   }
 
   private int getCurrentWindowIndexInternal() {
+    PlaybackInfo playbackInfo = this.playbackInfo;
+    Timeline.Period period = new Timeline.Period();
     if (playbackInfo.timeline.isEmpty()) {
       return maskingWindowIndex;
     } else {
@@ -978,6 +991,7 @@ import java.util.concurrent.TimeoutException;
       boolean positionDiscontinuity,
       @DiscontinuityReason int positionDiscontinuityReason,
       boolean timelineChanged) {
+    Timeline.Period period = new Timeline.Period();
 
     Timeline oldTimeline = oldPlaybackInfo.timeline;
     Timeline newTimeline = playbackInfo.timeline;
@@ -1347,7 +1361,8 @@ import java.util.concurrent.TimeoutException;
     }
   }
 
-  private long periodPositionUsToWindowPositionMs(MediaPeriodId periodId, long positionUs) {
+  private long periodPositionUsToWindowPositionMs(PlaybackInfo playbackInfo, MediaPeriodId periodId, long positionUs) {
+    Timeline.Period period = new Timeline.Period();
     try {
       long positionMs = C.usToMs(positionUs);
       playbackInfo.timeline.getPeriodByUid(periodId.periodUid, period);

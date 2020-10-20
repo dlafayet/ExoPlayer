@@ -170,6 +170,7 @@ public abstract class BasePlayer implements Player {
     if (timeline.isEmpty()) {
       return null;
     }
+    Timeline.Window window = new Timeline.Window();
     @Nullable
     MediaItem.PlaybackProperties playbackProperties =
         timeline.getWindow(getCurrentWindowIndex(), window).mediaItem.playbackProperties;
@@ -180,6 +181,7 @@ public abstract class BasePlayer implements Player {
   @Nullable
   public final MediaItem getCurrentMediaItem() {
     Timeline timeline = getCurrentTimeline();
+    Timeline.Window window = new Timeline.Window();
     return timeline.isEmpty()
         ? null
         : timeline.getWindow(getCurrentWindowIndex(), window).mediaItem;
@@ -192,6 +194,7 @@ public abstract class BasePlayer implements Player {
 
   @Override
   public MediaItem getMediaItemAt(int index) {
+    Timeline.Window window = new Timeline.Window();
     return getCurrentTimeline().getWindow(index, window).mediaItem;
   }
 
@@ -199,6 +202,7 @@ public abstract class BasePlayer implements Player {
   @Nullable
   public final Object getCurrentManifest() {
     Timeline timeline = getCurrentTimeline();
+    Timeline.Window window = new Timeline.Window();
     return timeline.isEmpty() ? null : timeline.getWindow(getCurrentWindowIndex(), window).manifest;
   }
 
@@ -214,18 +218,21 @@ public abstract class BasePlayer implements Player {
   @Override
   public final boolean isCurrentWindowDynamic() {
     Timeline timeline = getCurrentTimeline();
+    Timeline.Window window = new Timeline.Window();
     return !timeline.isEmpty() && timeline.getWindow(getCurrentWindowIndex(), window).isDynamic;
   }
 
   @Override
   public final boolean isCurrentWindowLive() {
     Timeline timeline = getCurrentTimeline();
+    Timeline.Window window = new Timeline.Window();
     return !timeline.isEmpty() && timeline.getWindow(getCurrentWindowIndex(), window).isLive;
   }
 
   @Override
   public final long getCurrentLiveOffset() {
     Timeline timeline = getCurrentTimeline();
+    Timeline.Window window = new Timeline.Window();
     if (timeline.isEmpty()) {
       return C.TIME_UNSET;
     }
@@ -239,12 +246,14 @@ public abstract class BasePlayer implements Player {
   @Override
   public final boolean isCurrentWindowSeekable() {
     Timeline timeline = getCurrentTimeline();
+    Timeline.Window window = new Timeline.Window();
     return !timeline.isEmpty() && timeline.getWindow(getCurrentWindowIndex(), window).isSeekable;
   }
 
   @Override
   public final long getContentDuration() {
     Timeline timeline = getCurrentTimeline();
+    Timeline.Window window = new Timeline.Window();
     return timeline.isEmpty()
         ? C.TIME_UNSET
         : timeline.getWindow(getCurrentWindowIndex(), window).getDurationMs();
