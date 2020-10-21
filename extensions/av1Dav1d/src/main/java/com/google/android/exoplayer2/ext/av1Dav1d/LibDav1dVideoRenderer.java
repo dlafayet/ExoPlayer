@@ -17,6 +17,7 @@ package com.google.android.exoplayer2.ext.av1Dav1d;
 
 import static java.lang.Runtime.getRuntime;
 
+import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.view.Surface;
@@ -317,11 +318,15 @@ public class LibDav1dVideoRenderer extends DecoderVideoRenderer {
     return TAG;
   }
 
+  @SuppressLint("WrongConstant")
   @Override
   public int supportsFormat(Format format) throws ExoPlaybackException {
     if (!MimeTypes.VIDEO_AV1.equalsIgnoreCase(format.sampleMimeType)
         || !Dav1dLibrary.isAvailable()) {
-      return RendererCapabilities.create(FORMAT_UNSUPPORTED_TYPE);
+      // SPY-31715 - don't use RendererCapabilities.create() to work around debug compile issue
+      return RendererCapabilities.FORMAT_UNSUPPORTED_TYPE |
+          RendererCapabilities.ADAPTIVE_SEAMLESS |
+          RendererCapabilities.TUNNELING_NOT_SUPPORTED;
     }
     return RendererCapabilities.create(FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED);
   }
