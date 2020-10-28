@@ -44,6 +44,7 @@ import com.google.android.exoplayer2.drm.DrmSession;
 import com.google.android.exoplayer2.drm.DrmSession.DrmSessionException;
 import com.google.android.exoplayer2.drm.ExoMediaCrypto;
 import com.google.android.exoplayer2.drm.FrameworkMediaCrypto;
+import com.google.android.exoplayer2.drm.NfDrmSessionAB31906;
 import com.google.android.exoplayer2.mediacodec.MediaCodecUtil.DecoderQueryException;
 import com.google.android.exoplayer2.source.MediaPeriod;
 import com.google.android.exoplayer2.source.SampleStream;
@@ -1460,6 +1461,22 @@ public abstract class MediaCodecRenderer extends BaseRenderer {
       if (!legacyKeepAvailableCodecInfosWithoutCodec()) {
         availableCodecInfos = null;
       }
+
+      /**
+       * SPY-32472
+       * MediaCrypto could be stale when playback advance to a new media while codec was released.
+       * This is the case for audio mode playgraph postplay. When this happens, we choose to reset
+       * the MediaCrypto
+       * To limit scope of impact, MediaCrypto is reset only for Audio Mode Test. It could apply
+       * more generally.
+       */
+      if (formatHolder.drmSession instanceof NfDrmSessionAB31906) {
+        if (((NfDrmSessionAB31906) formatHolder.drmSession)
+            .resetUnboundMediaCryptoOnFormatChange()) {
+          mediaCrypto = null;
+        }
+      }
+
       maybeInitCodecOrBypass();
       return;
     }
