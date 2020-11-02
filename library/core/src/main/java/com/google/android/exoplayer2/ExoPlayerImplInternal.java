@@ -1083,6 +1083,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
             newPeriodPositionUs =
                 playingPeriodHolder.mediaPeriod.getAdjustedSeekPositionUs(
                     newPeriodPositionUs, seekParameters);
+          } else if(newPeriodPositionUs != 0) {
+            newPeriodPositionUs = C.POSITION_UNSET;
           }
 //          SPY-18531: we need events to trigger UI returning from seek - do not ignore seek
 //          if (C.usToMs(newPeriodPositionUs) == C.usToMs(playbackInfo.positionUs)
@@ -1093,22 +1095,27 @@ import java.util.concurrent.atomic.AtomicBoolean;
 //            return;
 //          }
         }
-        if(periodPositionUs == C.POSITION_UNSET) {
+        // NFLX - we force newPeriodPositionUs to be POSITION_UNSET if the "final" seek position
+        // isn't available yet (due to headers missing). in this case, we save the seek request
+        // so we can snap to the start of the chunk when headers are received
+        if(newPeriodPositionUs == C.POSITION_UNSET) {
           // we do not have segment index yet - defer seeking until it is available
           pendingInitialSeekPosition = seekPosition;
-        } else {
-          if (!periodId.equals(playbackInfo.periodId) && newPeriodPositionUs > 0) {
-            // we are seeking to a new period, so we defer snapping until we are in the new period
-            pendingInitialSeekPosition = seekPosition;
-          }
-          newPeriodPositionUs =
-              seekToPeriodPosition(
-                  periodId,
-                  newPeriodPositionUs,
-                  /* forceBufferingState= */ playbackInfo.playbackState == Player.STATE_ENDED);
-          seekPositionAdjusted |= periodPositionUs != newPeriodPositionUs;
-          periodPositionUs = newPeriodPositionUs;
+          // still seek close to requested time. at least this would put us in correct period.
+          // final seek position will be adjusted when segment index is received
+          newPeriodPositionUs = periodPositionUs;
+        } else if(!periodId.equals(playbackInfo.periodId) && newPeriodPositionUs > 0) {
+          // we are seeking to a new period, so we defer snapping until we are in the new period
+          pendingInitialSeekPosition = seekPosition;
         }
+        // END NFLX - save seek position if  headers are unavailable
+        newPeriodPositionUs =
+            seekToPeriodPosition(
+                periodId,
+                newPeriodPositionUs,
+                /* forceBufferingState= */ playbackInfo.playbackState == Player.STATE_ENDED);
+        seekPositionAdjusted |= periodPositionUs != newPeriodPositionUs;
+        periodPositionUs = newPeriodPositionUs;
       }
     } finally {
       playbackInfo =
