@@ -208,6 +208,26 @@ public class ClippingMediaSource extends CompositeMediaSource<Void> {
   protected void prepareSourceInternal(@Nullable TransferListener mediaTransferListener) {
     super.prepareSourceInternal(mediaTransferListener);
     prepareChildSource(/* id= */ null, mediaSource);
+    playbackThreadHandler = new android.os.Handler();
+  }
+
+  @Nullable
+  private android.os.Handler playbackThreadHandler;
+  private long dynamicEndUs = C.TIME_UNSET;
+  public void updateEndPositionUs(long updatedEndUs) {
+    Assertions.checkState(allowDynamicClippingUpdates);
+    if (playbackThreadHandler == null) {
+      this.dynamicEndUs = updatedEndUs;
+    } else {
+      playbackThreadHandler.post(() -> {
+        if (ClippingMediaSource.this.dynamicEndUs != updatedEndUs) {
+          ClippingMediaSource.this.dynamicEndUs = updatedEndUs;
+          if (clippingTimeline != null && clippingError == null) {
+            refreshClippedTimeline(clippingTimeline.timeline);
+          }
+        }
+      });
+    }
   }
 
   @Override
@@ -272,6 +292,13 @@ public class ClippingMediaSource extends CompositeMediaSource<Void> {
           endUs == C.TIME_END_OF_SOURCE
               ? C.TIME_END_OF_SOURCE
               : windowPositionInPeriodUs + windowEndUs;
+      if (dynamicEndUs != C.TIME_UNSET) {
+        windowEndUs = dynamicEndUs;
+        periodEndUs =
+            dynamicEndUs == C.TIME_END_OF_SOURCE
+                ? C.TIME_END_OF_SOURCE
+                : windowPositionInPeriodUs + windowEndUs;
+      }
       int count = mediaPeriods.size();
       for (int i = 0; i < count; i++) {
         mediaPeriods.get(i).updateClipping(periodStartUs, periodEndUs);
