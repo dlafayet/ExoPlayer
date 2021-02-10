@@ -29,27 +29,17 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * An abstract base class suitable for most {@link TrackSelection} implementations.
- */
-public abstract class BaseTrackSelection implements TrackSelection {
+/** An abstract base class suitable for most {@link ExoTrackSelection} implementations. */
+public abstract class BaseTrackSelection implements ExoTrackSelection {
 
-  /**
-   * The selected {@link TrackGroup}.
-   */
+  /** The selected {@link TrackGroup}. */
   protected final TrackGroup group;
-  /**
-   * The number of selected tracks within the {@link TrackGroup}. Always greater than zero.
-   */
+  /** The number of selected tracks within the {@link TrackGroup}. Always greater than zero. */
   protected final int length;
-  /**
-   * The indices of the selected tracks in {@link #group}, in order of decreasing bandwidth.
-   */
+  /** The indices of the selected tracks in {@link #group}, in order of decreasing bandwidth. */
   protected final int[] tracks;
 
-  /**
-   * The {@link Format}s of the selected tracks, in order of decreasing bandwidth.
-   */
+  /** The {@link Format}s of the selected tracks, in order of decreasing bandwidth. */
   private final Format[] formats;
   /** Selected track exclusion timestamps, in order of decreasing bandwidth. */
   private final long[] excludeUntilTimes;
