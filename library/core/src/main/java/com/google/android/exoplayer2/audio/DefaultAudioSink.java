@@ -488,7 +488,6 @@ public class DefaultAudioSink implements AudioSink {
       throws ConfigurationException {
     int inputPcmFrameSize;
     @Nullable AudioProcessor[] availableAudioProcessors;
-    boolean canApplyPlaybackParameters;
 
     @OutputMode int outputMode;
     @C.Encoding int outputEncoding;
@@ -500,11 +499,10 @@ public class DefaultAudioSink implements AudioSink {
       Assertions.checkArgument(Util.isEncodingLinearPcm(inputFormat.pcmEncoding));
 
       inputPcmFrameSize = Util.getPcmFrameSize(inputFormat.pcmEncoding, inputFormat.channelCount);
-      boolean useFloatOutput =
-          enableFloatOutput && Util.isEncodingHighResolutionPcm(inputFormat.pcmEncoding);
       availableAudioProcessors =
-          useFloatOutput ? toFloatPcmAvailableAudioProcessors : toIntPcmAvailableAudioProcessors;
-      canApplyPlaybackParameters = !useFloatOutput;
+          shouldUseFloatOutput(inputFormat.pcmEncoding)
+              ? toFloatPcmAvailableAudioProcessors
+              : toIntPcmAvailableAudioProcessors;
 
       trimmingAudioProcessor.setTrimFrameCount(
           inputFormat.encoderDelay, inputFormat.encoderPadding);
@@ -541,7 +539,6 @@ public class DefaultAudioSink implements AudioSink {
     } else {
       inputPcmFrameSize = C.LENGTH_UNSET;
       availableAudioProcessors = new AudioProcessor[0];
-      canApplyPlaybackParameters = false;
       outputSampleRate = inputFormat.sampleRate;
       outputPcmFrameSize = C.LENGTH_UNSET;
       if (enableOffload && isOffloadedPlaybackSupported(inputFormat, audioAttributes)) {
@@ -586,7 +583,6 @@ public class DefaultAudioSink implements AudioSink {
             outputEncoding,
             specifiedBufferSize,
             enableAudioTrackPlaybackParams,
-            canApplyPlaybackParameters,
             availableAudioProcessors);
     if (isAudioTrackInitialized()) {
       this.pendingConfiguration = pendingConfiguration;
@@ -1340,11 +1336,11 @@ public class DefaultAudioSink implements AudioSink {
 
   private void applyAudioProcessorPlaybackParametersAndSkipSilence(long presentationTimeUs) {
     PlaybackParameters playbackParameters =
-        configuration.canApplyPlaybackParameters
+        shouldApplyAudioProcessorPlaybackParameters()
             ? audioProcessorChain.applyPlaybackParameters(getAudioProcessorPlaybackParameters())
             : PlaybackParameters.DEFAULT;
     boolean skipSilenceEnabled =
-        configuration.canApplyPlaybackParameters
+        shouldApplyAudioProcessorPlaybackParameters()
             ? audioProcessorChain.applySkipSilenceEnabled(getSkipSilenceEnabled())
             : DEFAULT_SKIP_SILENCE;
     mediaPositionParametersCheckpoints.add(
@@ -1357,6 +1353,31 @@ public class DefaultAudioSink implements AudioSink {
     if (listener != null) {
       listener.onSkipSilenceEnabledChanged(skipSilenceEnabled);
     }
+  }
+
+  /**
+   * Returns whether audio processor playback parameters should be applied in the current
+   * configuration.
+   */
+  private boolean shouldApplyAudioProcessorPlaybackParameters() {
+    // We don't apply speed/pitch adjustment using an audio processor in the following cases:
+    // - in tunneling mode, because audio processing can change the duration of audio yet the video
+    //   frame presentation times are currently not modified (see also
+    //   https://github.com/google/ExoPlayer/issues/4803);
+    // - when playing encoded audio via passthrough/offload, because modifying the audio stream
+    //   would require decoding/re-encoding; and
+    // - when outputting float PCM audio, because SonicAudioProcessor outputs 16-bit integer PCM.
+    return !tunneling
+        && MimeTypes.AUDIO_RAW.equals(configuration.inputFormat.sampleMimeType)
+        && !shouldUseFloatOutput(configuration.inputFormat.pcmEncoding);
+  }
+
+  /**
+   * Returns whether audio in the specified PCM encoding should be written to the audio track as
+   * float PCM.
+   */
+  private boolean shouldUseFloatOutput(@C.PcmEncoding int pcmEncoding) {
+    return enableFloatOutput && Util.isEncodingHighResolutionPcm(pcmEncoding);
   }
 
   /**
@@ -1901,7 +1922,6 @@ public class DefaultAudioSink implements AudioSink {
     public final int outputChannelConfig;
     @C.Encoding public final int outputEncoding;
     public final int bufferSize;
-    public final boolean canApplyPlaybackParameters;
     public final AudioProcessor[] availableAudioProcessors;
 
     public Configuration(
@@ -1914,7 +1934,6 @@ public class DefaultAudioSink implements AudioSink {
         int outputEncoding,
         int specifiedBufferSize,
         boolean enableAudioTrackPlaybackParams,
-        boolean canApplyPlaybackParameters,
         AudioProcessor[] availableAudioProcessors) {
       this.inputFormat = inputFormat;
       this.inputPcmFrameSize = inputPcmFrameSize;
@@ -1923,7 +1942,6 @@ public class DefaultAudioSink implements AudioSink {
       this.outputSampleRate = outputSampleRate;
       this.outputChannelConfig = outputChannelConfig;
       this.outputEncoding = outputEncoding;
-      this.canApplyPlaybackParameters = canApplyPlaybackParameters;
       this.availableAudioProcessors = availableAudioProcessors;
 
       // Call computeBufferSize() last as it depends on the other configuration values.
