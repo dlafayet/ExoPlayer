@@ -774,6 +774,20 @@ public final class CacheDataSource implements DataSource {
       boolean isRedirected = !requestDataSpec.uri.equals(actualUri);
       ContentMetadataMutations.setRedirectedUri(mutations, isRedirected ? actualUri : null);
     }
+
+    /**
+     * persists Netflix content metadata with cache as part of SPY-33122
+     * metadata alongside cached media could:
+     * 1, influence cache eviction policy
+     * 2, allow retrieve metadata for cached media, such as codec, frame rate, ident IDs etc.
+     */
+    if(nextDataSpec.customData != null) {
+      String customDataString = nextDataSpec.customData.toString();
+      if(customDataString != null && !customDataString.isEmpty()) {
+        mutations.set(ContentMetadata.KEY_NETFLIX_METADATA, customDataString);
+      }
+    }
+
     if (isWritingToCache()) {
       cache.applyContentMetadataMutations(key, mutations);
     }
