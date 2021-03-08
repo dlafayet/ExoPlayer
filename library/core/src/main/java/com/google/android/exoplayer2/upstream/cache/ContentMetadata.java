@@ -84,4 +84,8 @@ public interface ContentMetadata {
     @Nullable String redirectedUri = contentMetadata.get(KEY_REDIRECTED_URI, (String) null);
     return redirectedUri == null ? null : Uri.parse(redirectedUri);
   }
+  /**
+   * cache key for persisted netflix specific content metadata
+   */
+  String KEY_NETFLIX_METADATA = KEY_CUSTOM_PREFIX + "nf";
 }
