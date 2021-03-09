@@ -149,7 +149,7 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
     SampleQueue[] sampleQueues = new SampleQueue[1 + embeddedTrackCount];
 
     primarySampleQueue =
-        new SampleQueue(
+        SampleQueue.createWithDrm(
             allocator,
             /* playbackLooper= */ checkNotNull(Looper.myLooper()),
             drmSessionManager,
@@ -158,12 +158,7 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
     sampleQueues[0] = primarySampleQueue;
 
     for (int i = 0; i < embeddedTrackCount; i++) {
-      SampleQueue sampleQueue =
-          new SampleQueue(
-              allocator,
-              /* playbackLooper= */ checkNotNull(Looper.myLooper()),
-              DrmSessionManager.getDummyDrmSessionManager(),
-              drmEventDispatcher);
+      SampleQueue sampleQueue = SampleQueue.createWithoutDrm(allocator);
       embeddedSampleQueues[i] = sampleQueue;
       sampleQueues[i + 1] = sampleQueue;
       trackTypes[i + 1] = this.embeddedTrackTypes[i];
@@ -319,6 +314,11 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
       mediaChunks.clear();
       nextNotifyPrimaryFormatMediaChunkIndex = 0;
       if (loader.isLoading()) {
+        // Discard as much as we can synchronously.
+        primarySampleQueue.discardToEnd();
+        for (SampleQueue embeddedSampleQueue : embeddedSampleQueues) {
+          embeddedSampleQueue.discardToEnd();
+        }
         loader.cancelLoading();
       } else {
         loader.clearFatalError();

@@ -20,7 +20,7 @@ import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.FormatHolder;
 import com.google.android.exoplayer2.SeekParameters;
 import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
-import com.google.android.exoplayer2.trackselection.TrackSelection;
+import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.Util;
@@ -37,9 +37,7 @@ import androidx.annotation.Nullable;
  */
 public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callback {
 
-  /**
-   * The {@link MediaPeriod} wrapped by this clipping media period.
-   */
+  /** The {@link MediaPeriod} wrapped by this clipping media period. */
   public final MediaPeriod mediaPeriod;
 
   @Nullable private MediaPeriod.Callback callback;
@@ -101,7 +99,7 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
 
   @Override
   public long selectTracks(
-      @NullableType TrackSelection[] selections,
+      @NullableType ExoTrackSelection[] selections,
       boolean[] mayRetainStreamFlags,
       @NullableType SampleStream[] streams,
       boolean[] streamResetFlags,
@@ -253,7 +251,7 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
   }
 
   private static boolean shouldKeepInitialDiscontinuity(
-      long startUs, @NullableType TrackSelection[] selections) {
+      long startUs, @NullableType ExoTrackSelection[] selections) {
     // If the clipping start position is non-zero, the clipping sample streams will adjust
     // timestamps on buffers they read from the unclipped sample streams. These adjusted buffer
     // timestamps can be negative, because sample streams provide buffers starting at a key-frame,
@@ -264,7 +262,7 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
     // However, for tracks where all samples are sync samples, we assume they have random access
     // seek behaviour and do not need an initial discontinuity to reset the renderer.
     if (startUs != 0) {
-      for (TrackSelection trackSelection : selections) {
+      for (ExoTrackSelection trackSelection : selections) {
         if (trackSelection != null) {
           Format selectedFormat = trackSelection.getSelectedFormat();
           if (!MimeTypes.allSamplesAreSyncSamples(
@@ -277,9 +275,7 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
     return false;
   }
 
-  /**
-   * Wraps a {@link SampleStream} and clips its samples.
-   */
+  /** Wraps a {@link SampleStream} and clips its samples. */
   private final class ClippingSampleStream implements SampleStream {
 
     public final SampleStream childStream;
@@ -306,8 +302,8 @@ public final class ClippingMediaPeriod implements MediaPeriod, MediaPeriod.Callb
     }
 
     @Override
-    public int readData(FormatHolder formatHolder, DecoderInputBuffer buffer,
-        boolean requireFormat) {
+    public int readData(
+        FormatHolder formatHolder, DecoderInputBuffer buffer, boolean requireFormat) {
       if (isPendingInitialDiscontinuity()) {
         return C.RESULT_NOTHING_READ;
       }

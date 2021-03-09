@@ -31,6 +31,7 @@ import com.google.android.exoplayer2.audio.OpusUtil;
 import com.google.android.exoplayer2.drm.DrmInitData;
 import com.google.android.exoplayer2.extractor.GaplessInfoHolder;
 import com.google.android.exoplayer2.metadata.Metadata;
+import com.google.android.exoplayer2.metadata.mp4.SmtaMetadataEntry;
 import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.CodecSpecificDataUtil;
 import com.google.android.exoplayer2.util.Log;
@@ -144,29 +145,29 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
    * Parses a udta atom.
    *
    * @param udtaAtom The udta (user data) atom to decode.
-   * @param isQuickTime True for QuickTime media. False otherwise.
-   * @return Parsed metadata, or null.
+   * @return A {@link Pair} containing the metadata from the meta child atom as first value (if
+   *     any), and the metadata from the smta child atom as second value (if any).
    */
-  @Nullable
-  public static Metadata parseUdta(Atom.LeafAtom udtaAtom, boolean isQuickTime) {
-    if (isQuickTime) {
-      // Meta boxes are regular boxes rather than full boxes in QuickTime. For now, don't try and
-      // decode one.
-      return null;
-    }
+  public static Pair<@NullableType Metadata, @NullableType Metadata> parseUdta(
+      Atom.LeafAtom udtaAtom) {
     ParsableByteArray udtaData = udtaAtom.data;
     udtaData.setPosition(Atom.HEADER_SIZE);
+    @Nullable Metadata metaMetadata = null;
+    @Nullable Metadata smtaMetadata = null;
     while (udtaData.bytesLeft() >= Atom.HEADER_SIZE) {
       int atomPosition = udtaData.getPosition();
       int atomSize = udtaData.readInt();
       int atomType = udtaData.readInt();
       if (atomType == Atom.TYPE_meta) {
         udtaData.setPosition(atomPosition);
-        return parseUdtaMeta(udtaData, atomPosition + atomSize);
+        metaMetadata = parseUdtaMeta(udtaData, atomPosition + atomSize);
+      } else if (atomType == Atom.TYPE_smta) {
+        udtaData.setPosition(atomPosition);
+        smtaMetadata = parseSmta(udtaData, atomPosition + atomSize);
       }
       udtaData.setPosition(atomPosition + atomSize);
     }
-    return null;
+    return Pair.create(metaMetadata, smtaMetadata);
   }
 
   /**
@@ -222,6 +223,30 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
       ilst.setPosition(atomPosition + atomSize);
     }
     return entries.isEmpty() ? null : new Metadata(entries);
+  }
+
+  /**
+   * Possibly skips the version and flags fields (1+3 byte) of a full meta atom.
+   *
+   * <p>Atoms of type {@link Atom#TYPE_meta} are defined to be full atoms which have four additional
+   * bytes for a version and a flags field (see 4.2 'Object Structure' in ISO/IEC 14496-12:2005).
+   * QuickTime do not have such a full box structure. Since some of these files are encoded wrongly,
+   * we can't rely on the file type though. Instead we must check the 8 bytes after the common
+   * header bytes ourselves.
+   *
+   * @param meta The 8 or more bytes following the meta atom size and type.
+   */
+  public static void maybeSkipRemainingMetaAtomHeaderBytes(ParsableByteArray meta) {
+    int endPosition = meta.getPosition();
+    // The next 8 bytes can be either:
+    // (iso) [1 byte version + 3 bytes flags][4 byte size of next atom]
+    // (qt)  [4 byte size of next atom      ][4 byte hdlr atom type   ]
+    // In case of (iso) we need to skip the next 4 bytes.
+    meta.skipBytes(4);
+    if (meta.readInt() != Atom.TYPE_hdlr) {
+      endPosition += 4;
+    }
+    meta.setPosition(endPosition);
   }
 
   /**
@@ -312,7 +337,7 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     SampleSizeBox sampleSizeBox;
     @Nullable Atom.LeafAtom stszAtom = stblAtom.getLeafAtomOfType(Atom.TYPE_stsz);
     if (stszAtom != null) {
-      sampleSizeBox = new StszSampleSizeBox(stszAtom);
+      sampleSizeBox = new StszSampleSizeBox(stszAtom, track.format);
     } else {
       @Nullable Atom.LeafAtom stz2Atom = stblAtom.getLeafAtomOfType(Atom.TYPE_stz2);
       if (stz2Atom == null) {
@@ -384,9 +409,13 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     }
 
     // Fixed sample size raw audio may need to be rechunked.
-    boolean isFixedSampleSizeRawAudio =
-        sampleSizeBox.isFixedSampleSize()
-            && MimeTypes.AUDIO_RAW.equals(track.format.sampleMimeType)
+    int fixedSampleSize = sampleSizeBox.getFixedSampleSize();
+    @Nullable String sampleMimeType = track.format.sampleMimeType;
+    boolean rechunkFixedSizeSamples =
+        fixedSampleSize != C.LENGTH_UNSET
+            && (MimeTypes.AUDIO_RAW.equals(sampleMimeType)
+                || MimeTypes.AUDIO_MLAW.equals(sampleMimeType)
+                || MimeTypes.AUDIO_ALAW.equals(sampleMimeType))
             && remainingTimestampDeltaChanges == 0
             && remainingTimestampOffsetChanges == 0
             && remainingSynchronizationSamples == 0;
@@ -399,15 +428,13 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     long timestampTimeUnits = 0;
     long duration;
 
-    if (isFixedSampleSizeRawAudio) {
+    if (rechunkFixedSizeSamples) {
       long[] chunkOffsetsBytes = new long[chunkIterator.length];
       int[] chunkSampleCounts = new int[chunkIterator.length];
       while (chunkIterator.moveNext()) {
         chunkOffsetsBytes[chunkIterator.index] = chunkIterator.offset;
         chunkSampleCounts[chunkIterator.index] = chunkIterator.numSamples;
       }
-      int fixedSampleSize =
-          Util.getPcmFrameSize(track.format.pcmEncoding, track.format.channelCount);
       FixedSampleSizeRechunker.Results rechunkedResults =
           FixedSampleSizeRechunker.rechunk(
               fixedSampleSize, chunkOffsetsBytes, chunkSampleCounts, timestampDeltaInTimeUnits);
@@ -672,7 +699,8 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
 
   @Nullable
   private static Metadata parseUdtaMeta(ParsableByteArray meta, int limit) {
-    meta.skipBytes(Atom.FULL_HEADER_SIZE);
+    meta.skipBytes(Atom.HEADER_SIZE);
+    maybeSkipRemainingMetaAtomHeaderBytes(meta);
     while (meta.getPosition() < limit) {
       int atomPosition = meta.getPosition();
       int atomSize = meta.readInt();
@@ -697,6 +725,37 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
       }
     }
     return entries.isEmpty() ? null : new Metadata(entries);
+  }
+
+  /**
+   * Parses metadata from a Samsung smta atom.
+   *
+   * <p>See [Internal: b/150138465#comment76].
+   */
+  @Nullable
+  private static Metadata parseSmta(ParsableByteArray smta, int limit) {
+    smta.skipBytes(Atom.FULL_HEADER_SIZE);
+    while (smta.getPosition() < limit) {
+      int atomPosition = smta.getPosition();
+      int atomSize = smta.readInt();
+      int atomType = smta.readInt();
+      if (atomType == Atom.TYPE_saut) {
+        if (atomSize < 14) {
+          return null;
+        }
+        smta.skipBytes(5); // author (4), reserved = 0 (1).
+        int recordingMode = smta.readUnsignedByte();
+        if (recordingMode != 12 && recordingMode != 13) {
+          return null;
+        }
+        float captureFrameRate = recordingMode == 12 ? 240 : 120;
+        smta.skipBytes(1); // reserved = 1 (1).
+        int svcTemporalLayerCount = smta.readUnsignedByte();
+        return new Metadata(new SmtaMetadataEntry(captureFrameRate, svcTemporalLayerCount));
+      }
+      smta.setPosition(atomPosition + atomSize);
+    }
+    return null;
   }
 
   /**
@@ -851,6 +910,7 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
       if (childAtomType == Atom.TYPE_avc1
           || childAtomType == Atom.TYPE_avc3
           || childAtomType == Atom.TYPE_encv
+          || childAtomType == Atom.TYPE_m1v_
           || childAtomType == Atom.TYPE_mp4v
           || childAtomType == Atom.TYPE_hvc1
           || childAtomType == Atom.TYPE_hev1
@@ -878,6 +938,7 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
           || childAtomType == Atom.TYPE_lpcm
           || childAtomType == Atom.TYPE_sowt
           || childAtomType == Atom.TYPE_twos
+          || childAtomType == Atom.TYPE__mp2
           || childAtomType == Atom.TYPE__mp3
           || childAtomType == Atom.TYPE_alac
           || childAtomType == Atom.TYPE_alaw
@@ -891,6 +952,8 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
           || childAtomType == Atom.TYPE_c608) {
         parseTextSampleEntry(stsd, childAtomType, childStartPosition, childAtomSize, trackId,
             language, out);
+      } else if (childAtomType == Atom.TYPE_mett) {
+        parseMetaDataSampleEntry(stsd, childAtomType, childStartPosition, trackId, out);
       } else if (childAtomType == Atom.TYPE_camm) {
         out.format =
             new Format.Builder()
@@ -988,8 +1051,12 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     //   drmInitData = null;
     // }
 
-    @Nullable List<byte[]> initializationData = null;
     @Nullable String mimeType = null;
+    if (atomType == Atom.TYPE_m1v_) {
+      mimeType = MimeTypes.VIDEO_MPEG;
+    }
+
+    @Nullable List<byte[]> initializationData = null;
     @Nullable String codecs = null;
     @Nullable byte[] projectionData = null;
     @C.StereoMode
@@ -1014,6 +1081,7 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
         if (!pixelWidthHeightRatioFromPasp) {
           pixelWidthHeightRatio = avcConfig.pixelWidthAspectRatio;
         }
+        codecs = avcConfig.codecs;
       } else if (childAtomType == Atom.TYPE_hvcC) {
         Assertions.checkState(mimeType == null);
         mimeType = MimeTypes.VIDEO_H265;
@@ -1021,6 +1089,7 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
         HevcConfig hevcConfig = HevcConfig.parse(parent);
         initializationData = hevcConfig.initializationData;
         out.nalUnitLengthFieldLength = hevcConfig.nalUnitLengthFieldLength;
+        codecs = hevcConfig.codecs;
       } else if (childAtomType == Atom.TYPE_dvcC || childAtomType == Atom.TYPE_dvvC) {
         @Nullable DolbyVisionConfig dolbyVisionConfig = DolbyVisionConfig.parse(parent);
         if (dolbyVisionConfig != null) {
@@ -1095,6 +1164,18 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
             .setInitializationData(initializationData)
             .setDrmInitData(drmInitData)
             .build();
+  }
+
+  private static void parseMetaDataSampleEntry(
+      ParsableByteArray parent, int atomType, int position, int trackId, StsdData out) {
+    parent.setPosition(position + Atom.HEADER_SIZE + StsdData.STSD_HEADER_SIZE);
+    if (atomType == Atom.TYPE_mett) {
+      parent.readNullTerminatedString(); // Skip optional content_encoding
+      @Nullable String mimeType = parent.readNullTerminatedString();
+      if (mimeType != null) {
+        out.format = new Format.Builder().setId(trackId).setSampleMimeType(mimeType).build();
+      }
+    }
   }
 
   /**
@@ -1229,7 +1310,7 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     } else if (atomType == Atom.TYPE_twos) {
       mimeType = MimeTypes.AUDIO_RAW;
       pcmEncoding = C.ENCODING_PCM_16BIT_BIG_ENDIAN;
-    } else if (atomType == Atom.TYPE__mp3) {
+    } else if (atomType == Atom.TYPE__mp2 || atomType == Atom.TYPE__mp3) {
       mimeType = MimeTypes.AUDIO_MPEG;
     } else if (atomType == Atom.TYPE_alac) {
       mimeType = MimeTypes.AUDIO_ALAC;
@@ -1646,16 +1727,11 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
      */
     int getSampleCount();
 
-    /**
-     * Returns the size for the next sample.
-     */
+    /** Returns the size of each sample if fixed, or {@link C#LENGTH_UNSET} otherwise. */
+    int getFixedSampleSize();
+
+    /** Returns the size for the next sample. */
     int readNextSampleSize();
-
-    /**
-     * Returns whether samples have a fixed size.
-     */
-    boolean isFixedSampleSize();
-
   }
 
   /**
@@ -1667,10 +1743,26 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     private final int sampleCount;
     private final ParsableByteArray data;
 
-    public StszSampleSizeBox(Atom.LeafAtom stszAtom) {
+    public StszSampleSizeBox(Atom.LeafAtom stszAtom, Format trackFormat) {
       data = stszAtom.data;
       data.setPosition(Atom.FULL_HEADER_SIZE);
-      fixedSampleSize = data.readUnsignedIntToInt();
+      int fixedSampleSize = data.readUnsignedIntToInt();
+      if (MimeTypes.AUDIO_RAW.equals(trackFormat.sampleMimeType)) {
+        int pcmFrameSize = Util.getPcmFrameSize(trackFormat.pcmEncoding, trackFormat.channelCount);
+        if (fixedSampleSize == 0 || fixedSampleSize % pcmFrameSize != 0) {
+          // The sample size from the stsz box is inconsistent with the PCM encoding and channel
+          // count derived from the stsd box. Choose stsd box as source of truth
+          // [Internal ref: b/171627904].
+          Log.w(
+              TAG,
+              "Audio sample size mismatch. stsd sample size: "
+                  + pcmFrameSize
+                  + ", stsz sample size: "
+                  + fixedSampleSize);
+          fixedSampleSize = pcmFrameSize;
+        }
+      }
+      this.fixedSampleSize = fixedSampleSize == 0 ? C.LENGTH_UNSET : fixedSampleSize;
       sampleCount = data.readUnsignedIntToInt();
     }
 
@@ -1680,15 +1772,14 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     }
 
     @Override
-    public int readNextSampleSize() {
-      return fixedSampleSize == 0 ? data.readUnsignedIntToInt() : fixedSampleSize;
+    public int getFixedSampleSize() {
+      return fixedSampleSize;
     }
 
     @Override
-    public boolean isFixedSampleSize() {
-      return fixedSampleSize != 0;
+    public int readNextSampleSize() {
+      return fixedSampleSize == C.LENGTH_UNSET ? data.readUnsignedIntToInt() : fixedSampleSize;
     }
-
   }
 
   /**
@@ -1717,6 +1808,11 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
     }
 
     @Override
+    public int getFixedSampleSize() {
+      return C.LENGTH_UNSET;
+    }
+
+    @Override
     public int readNextSampleSize() {
       if (fieldSize == 8) {
         return data.readUnsignedByte();
@@ -1735,12 +1831,6 @@ import org.checkerframework.checker.nullness.compatqual.NullableType;
         }
       }
     }
-
-    @Override
-    public boolean isFixedSampleSize() {
-      return false;
-    }
-
   }
 
 }

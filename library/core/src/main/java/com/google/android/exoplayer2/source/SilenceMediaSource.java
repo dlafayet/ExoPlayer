@@ -25,7 +25,7 @@ import com.google.android.exoplayer2.FormatHolder;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.SeekParameters;
 import com.google.android.exoplayer2.decoder.DecoderInputBuffer;
-import com.google.android.exoplayer2.trackselection.TrackSelection;
+import com.google.android.exoplayer2.trackselection.ExoTrackSelection;
 import com.google.android.exoplayer2.upstream.Allocator;
 import com.google.android.exoplayer2.upstream.TransferListener;
 import com.google.android.exoplayer2.util.Assertions;
@@ -132,7 +132,7 @@ public final class SilenceMediaSource extends BaseMediaSource {
             durationUs,
             /* isSeekable= */ true,
             /* isDynamic= */ false,
-            /* isLive= */ false,
+            /* useLiveConfiguration= */ false,
             /* manifest= */ null,
             mediaItem));
   }
@@ -194,7 +194,7 @@ public final class SilenceMediaSource extends BaseMediaSource {
 
     @Override
     public long selectTracks(
-        @NullableType TrackSelection[] selections,
+        @NullableType ExoTrackSelection[] selections,
         boolean[] mayRetainStreamFlags,
         @NullableType SampleStream[] streams,
         boolean[] streamResetFlags,
@@ -305,11 +305,15 @@ public final class SilenceMediaSource extends BaseMediaSource {
         return C.RESULT_BUFFER_READ;
       }
 
+      buffer.timeUs = getAudioPositionUs(positionBytes);
+      buffer.addFlag(C.BUFFER_FLAG_KEY_FRAME);
+      if (buffer.isFlagsOnly()) {
+        return C.RESULT_BUFFER_READ;
+      }
+
       int bytesToWrite = (int) min(SILENCE_SAMPLE.length, bytesRemaining);
       buffer.ensureSpaceForWrite(bytesToWrite);
       buffer.data.put(SILENCE_SAMPLE, /* offset= */ 0, bytesToWrite);
-      buffer.timeUs = getAudioPositionUs(positionBytes);
-      buffer.addFlag(C.BUFFER_FLAG_KEY_FRAME);
       positionBytes += bytesToWrite;
       return C.RESULT_BUFFER_READ;
     }

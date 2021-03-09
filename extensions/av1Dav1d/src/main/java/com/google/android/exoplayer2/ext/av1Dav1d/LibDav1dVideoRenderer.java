@@ -15,6 +15,7 @@
  */
 package com.google.android.exoplayer2.ext.av1Dav1d;
 
+import static com.google.android.exoplayer2.decoder.DecoderReuseEvaluation.REUSE_RESULT_YES_WITHOUT_RECONFIGURATION;
 import static java.lang.Runtime.getRuntime;
 
 import android.os.Handler;
@@ -29,6 +30,7 @@ import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.PlayerMessage.Target;
 import com.google.android.exoplayer2.RendererCapabilities;
 import com.google.android.exoplayer2.decoder.DecoderException;
+import com.google.android.exoplayer2.decoder.DecoderReuseEvaluation;
 import com.google.android.exoplayer2.drm.ExoMediaCrypto;
 import com.google.android.exoplayer2.util.Log;
 import com.google.android.exoplayer2.util.MimeTypes;
@@ -321,13 +323,19 @@ public class LibDav1dVideoRenderer extends DecoderVideoRenderer {
   public int supportsFormat(Format format) throws ExoPlaybackException {
     if (!MimeTypes.VIDEO_AV1.equalsIgnoreCase(format.sampleMimeType)
         || !Dav1dLibrary.isAvailable()) {
-      return RendererCapabilities.create(FORMAT_UNSUPPORTED_TYPE);
+      return RendererCapabilities.create(C.FORMAT_UNSUPPORTED_TYPE);
     }
-    return RendererCapabilities.create(FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED);
+    return RendererCapabilities.create(C.FORMAT_HANDLED, ADAPTIVE_SEAMLESS, TUNNELING_NOT_SUPPORTED);
   }
 
   @Override
-  protected boolean canKeepCodec(Format oldFormat, Format newFormat) {
-    return true;
+  protected DecoderReuseEvaluation canReuseDecoder(
+      String decoderName, Format oldFormat, Format newFormat) {
+    return new DecoderReuseEvaluation(
+        decoderName,
+        oldFormat,
+        newFormat,
+        REUSE_RESULT_YES_WITHOUT_RECONFIGURATION,
+        /* discardReasons= */ 0);
   }
 }
