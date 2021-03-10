@@ -88,6 +88,10 @@ import java.util.List;
  * </ul>
  */
 public class MediaCodecVideoRenderer extends MediaCodecRenderer {
+  public static boolean dummySurfaceEnabled = false;
+  public void experimentalEnableDummySurface(boolean enabled) {
+    dummySurfaceEnabled = enabled;
+  }
 
   private static final String TAG = "MediaCodecVideoRenderer";
   private static final String KEY_CROP_LEFT = "crop-left";
@@ -1172,7 +1176,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
         && !tunneling
         && !codecNeedsSetOutputSurfaceWorkaround(codecInfo.name)
         && (!codecInfo.secure || DummySurface.isSecureSupported(context))
-        && false; // SPY-13758
+        && dummySurfaceEnabled; // SPY-13758
   }
 
   private void setJoiningDeadlineMs() {
