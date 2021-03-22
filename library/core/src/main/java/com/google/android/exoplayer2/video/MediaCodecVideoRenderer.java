@@ -89,8 +89,12 @@ import java.util.List;
  */
 public class MediaCodecVideoRenderer extends MediaCodecRenderer {
   public static boolean dummySurfaceEnabled = false;
+  public static boolean secureDummySurfaceEnabled = true;
   public void experimentalEnableDummySurface(boolean enabled) {
     dummySurfaceEnabled = enabled;
+  }
+  public void experimentalEnableSecureDummySurface(boolean enabled) {
+    secureDummySurfaceEnabled = enabled;
   }
 
   private static final String TAG = "MediaCodecVideoRenderer";
@@ -1175,7 +1179,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer {
     return Util.SDK_INT >= 23
         && !tunneling
         && !codecNeedsSetOutputSurfaceWorkaround(codecInfo.name)
-        && (!codecInfo.secure || DummySurface.isSecureSupported(context))
+        && (!codecInfo.secure || (secureDummySurfaceEnabled && DummySurface.isSecureSupported(context)))
         && dummySurfaceEnabled; // SPY-13758
   }
 
