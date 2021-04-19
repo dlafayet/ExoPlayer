@@ -16,6 +16,7 @@
 package com.google.android.exoplayer2.text;
 
 import static com.google.android.exoplayer2.util.Assertions.checkNotNull;
+import static com.google.android.exoplayer2.util.Assertions.checkState;
 
 import android.os.Handler;
 import android.os.Handler.Callback;
@@ -93,6 +94,7 @@ public class TextRenderer extends BaseRenderer implements Callback {
   @Nullable private SubtitleOutputBuffer subtitle;
   @Nullable private SubtitleOutputBuffer nextSubtitle;
   private int nextSubtitleEventIndex;
+  private long finalStreamEndPositionUs;
 
   //rendering stats for current streamFormat;
   protected int renderCount = -1;
@@ -127,6 +129,7 @@ public class TextRenderer extends BaseRenderer implements Callback {
         outputLooper == null ? null : Util.createHandler(outputLooper, /* callback= */ this);
     this.decoderFactory = decoderFactory;
     formatHolder = new FormatHolder();
+    finalStreamEndPositionUs = C.TIME_UNSET;
   }
 
   @Override
@@ -147,6 +150,21 @@ public class TextRenderer extends BaseRenderer implements Callback {
     }
   }
 
+  /**
+   * Sets the position at which to stop rendering the current stream.
+   *
+   * <p>Must be called after {@link #setCurrentStreamFinal()}.
+   *
+   * @param streamEndPositionUs The position to stop rendering at or {@link C#LENGTH_UNSET} to
+   *     render until the end of the current stream.
+   */
+  // TODO(internal b/181312195): Remove this when it's no longer needed once subtitles are decoded
+  // on the loading side of SampleQueue.
+  public void setFinalStreamEndPositionUs(long streamEndPositionUs) {
+    checkState(isCurrentStreamFinal());
+    this.finalStreamEndPositionUs = streamEndPositionUs;
+  }
+
   @Override
   protected void onStreamChanged(Format[] formats, long startPositionUs, long offsetUs) {
     boolean formatChanged = !formats[0].equals(streamFormat);
@@ -165,6 +183,7 @@ public class TextRenderer extends BaseRenderer implements Callback {
     clearOutput();
     inputStreamEnded = false;
     outputStreamEnded = false;
+    finalStreamEndPositionUs = C.TIME_UNSET;
     if (decoderReplacementState != REPLACEMENT_STATE_NONE) {
       replaceDecoder();
     } else {
@@ -175,6 +194,13 @@ public class TextRenderer extends BaseRenderer implements Callback {
 
   @Override
   public void render(long positionUs, long elapsedRealtimeUs) {
+    if (isCurrentStreamFinal()
+        && finalStreamEndPositionUs != C.TIME_UNSET
+        && positionUs >= finalStreamEndPositionUs) {
+      releaseBuffers();
+      outputStreamEnded = true;
+    }
+
     if (outputStreamEnded) {
       return;
     }
@@ -291,6 +317,7 @@ public class TextRenderer extends BaseRenderer implements Callback {
   @Override
   protected void onDisabled() {
     streamFormat = null;
+    finalStreamEndPositionUs = C.TIME_UNSET;
     clearOutput();
     releaseDecoder();
   }
