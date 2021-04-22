@@ -1957,6 +1957,7 @@ public class SimpleExoPlayer extends BasePlayer
       StackTraceElement[] stack = Thread.currentThread().getStackTrace();
       if (stack != null && stack.length > 3) {
         switch(stack[3].getMethodName()) {
+          case "getPlaybackState":
           case "getCurrentPosition":
           case "getCurrentTimeline":
           case "getCurrentWindowIndex":
