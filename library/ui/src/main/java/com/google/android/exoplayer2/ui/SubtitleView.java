@@ -16,8 +16,6 @@
  */
 package com.google.android.exoplayer2.ui;
 
-import static java.lang.annotation.RetentionPolicy.SOURCE;
-
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Canvas;
@@ -31,18 +29,23 @@ import android.view.View;
 import android.view.accessibility.CaptioningManager;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
-import androidx.annotation.Dimension;
-import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
+
 import com.google.android.exoplayer2.text.CaptionStyleCompat;
 import com.google.android.exoplayer2.text.Cue;
 import com.google.android.exoplayer2.text.TextOutput;
 import com.google.android.exoplayer2.util.Util;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import androidx.annotation.Dimension;
+import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
+
+import static java.lang.annotation.RetentionPolicy.SOURCE;
 
 /** A view for displaying subtitle {@link Cue}s. */
 public class SubtitleView extends FrameLayout implements TextOutput {
@@ -387,7 +390,13 @@ public class SubtitleView extends FrameLayout implements TextOutput {
           cue.buildUpon().setTextSize(Cue.DIMEN_UNSET, Cue.TYPE_UNSET).clearWindowColor();
       if (cueText != null) {
         // Remove all spans, regardless of type.
-        strippedCue.setText(cueText.toString());
+        strippedCue.setText(new SpannableString(cueText.toString()));
+        if (cueText instanceof Spanned) {
+          // Add back Japanese language features
+          SubtitleViewUtils
+              .preserveJapaneseLanguageFeatures((SpannableString)strippedCue.getText(),
+                  (Spanned) cueText);
+        }
       }
       return strippedCue.build();
     } else if (!applyEmbeddedFontSizes) {
